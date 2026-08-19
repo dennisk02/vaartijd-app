@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+enum Role {
+  EMPLOYEE
+  ADMIN
+}
+
+enum Language {
+  NL
+  EN
+  UK
+  AR
+}
+
+/// Bedrijfsonderdeel waar een medewerker onder valt, gebruikt om de
+/// projectenlijst bij urenregistratie te beperken tot relevante projecten.
+/// Projecten worden hieraan gekoppeld op basis van hun naam (voorvoegsel
+/// "EVENTO - " => EVENTO, anders => EVENTS) -- zie lib/assignments.ts.
+enum ProjectGroup {
+  ALL
+  EVENTS
+  EVENTO
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  ERROR
+}
+
+enum DayPart {
+  DAY
+  NIGHT
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+}
+
+enum TimeEntryMode {
+  TIMER
+  MANUAL
+}
+
+model User {
+  id                 String          @id @default(cuid())
+  name               String
+  email              String          @unique
+  passwordHash       String
+  role               Role            @default(EMPLOYEE)
+  afasEmployeeNumber String?
+  shiftbaseEmployeeId String?
+  language           Language        @default(NL)
+  active             Boolean         @default(true)
+  canLogOccupancy    Boolean         @default(true)
+  canLogMeals        Boolean         @default(true)
+  canLogWaste        Boolean         @default(true)
+  useDefaultProject  Boolean         @default(false)
+  defaultProjectId   String?
+  projectGroup       ProjectGroup    @default(ALL)
+  defaultProject     Project?        @relation("UserDefaultProject", fields: [defaultProjectId], references: [id], onDelete: SetNull)
+  createdAt          DateTime        @default(now())
+  timeEntries        TimeEntry[]
+  shipOccupancies    ShipOccupancy[]
+  mealCounts         MealCount[]
+  foodWaste          FoodWaste[]
+  daySubmissions     DaySubmission[]
+  activeTimer        ActiveTimer?
+  assignedProjects   Project[]       @relation("UserProjects")
+  assignedShips      Ship[]          @relation("UserShips")
+}
+
+model Project {
+  id               String        @id @default(cuid())
+  name             String
+  afasProjectCode  String?
+  active           Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  timeEntries      TimeEntry[]
+  activeTimers     ActiveTimer[]
+  assignedUsers    User[]        @relation("UserProjects")
+  defaultForUsers  User[]        @relation("UserDefaultProject")
+
+  /// Herkomst uit Rentman (read-only sync) -- null betekent handmatig aangemaakt.
+  rentmanSubprojectId String?    @unique
+  rentmanProjectNumber String?
+  rentmanProjectName   String?
+  rentmanStatus        String?
+  rentmanStartsAt      DateTime?
+  rentmanEndsAt        DateTime?
+}
+
+model Ship {
+  id            String          @id @default(cuid())
+  name          String
+  code          String?
+  capacity      Int?
+  active        Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  occupancies   ShipOccupancy[]
+  mealCounts    MealCount[]
+  foodWaste     FoodWaste[]
+  timeEntries   TimeEntry[]
+  activeTimers  ActiveTimer[]
+  assignedUsers User[]          @relation("UserShips")
+}
+
+model TimeEntry {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  shipId         String?
+  ship           Ship?         @relation(fields: [shipId], references: [id], onDelete: SetNull)
+  date           DateTime
+  startTime      DateTime?
+  endTime        DateTime?
+  breakMinutes   Int?
+  mode           TimeEntryMode @default(MANUAL)
+  hours          Decimal       @db.Decimal(5, 2)
+  description    String?
+  afasSyncStatus SyncStatus    @default(PENDING)
+  afasSyncedAt   DateTime?
+  afasError      String?
+  shiftbaseSyncStatus SyncStatus @default(PENDING)
+  shiftbaseSyncedAt   DateTime?
+  shiftbaseError      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([userId, date])
+  @@index([afasSyncStatus])
+  @@index([shiftbaseSyncStatus])
+}
+
+/// Kleine generieke sleutel/waarde-tabel voor sync-status (bv. laatste
+/// Rentman "modified"-tijdstempel voor incrementele sync).
+model SyncState {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+/// Server-side "lopende timer" -- bestaat alleen zolang een dienst niet is
+/// gestopt. Bij stoppen wordt hieruit een TimeEntry aangemaakt en deze rij
+/// verwijderd.
+model ActiveTimer {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  shipId    String?
+  ship      Ship?    @relation(fields: [shipId], references: [id], onDelete: SetNull)
+  startedAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model ShipOccupancy {
+  id             String   @id @default(cuid())
+  shipId         String
+  ship           Ship     @relation(fields: [shipId], references: [id], onDelete: Cascade)
+  date           DateTime
+  dayPart        DayPart
+  passengerCount Int
+  crewCount      Int
+  createdById    String
+  createdBy      User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime @default(now())
+
+  @@unique([shipId, date, dayPart])
+  @@index([createdById, date])
+}
+
+/// Aantal geserveerde maaltijden per type (geen gewicht) -- los van FoodWaste
+/// omdat het een andere eenheid is (dataviz: nooit twee eenheden op één as).
+model MealCount {
+  id          String   @id @default(cuid())
+  shipId      String
+  ship        Ship     @relation(fields: [shipId], references: [id], onDelete: Cascade)
+  date        DateTime
+  mealType    MealType
+  countServed Int
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  @@unique([shipId, date, mealType])
+  @@index([createdById, date])
+}
+
+/// Voedselverspilling in kg per maaltijdtype.
+model FoodWaste {
+  id          String   @id @default(cuid())
+  shipId      String
+  ship        Ship     @relation(fields: [shipId], references: [id], onDelete: Cascade)
+  date        DateTime
+  mealType    MealType
+  kg          Decimal  @db.Decimal(6, 2)
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  @@unique([shipId, date, mealType])
+  @@index([createdById, date])
+}
+
+/// Bundelt de registraties van één medewerker op één dag tot "ingediend".
+model DaySubmission {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, date])
+}

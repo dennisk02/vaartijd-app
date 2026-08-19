@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/rentman/sync",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}
