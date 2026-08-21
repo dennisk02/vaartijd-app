@@ -3,12 +3,13 @@ import { isShiftbaseConfigured, isShiftbaseHoursExportEnabled } from "@/lib/shif
 import { Card, SyncStatusBadge } from "@/components/ui";
 import { ShiftbaseExplorer } from "@/components/admin/shiftbase-explorer";
 import { ShiftbaseHoursControls } from "@/components/admin/shiftbase-hours-controls";
+import { ShiftbaseCrewControls } from "@/components/admin/shiftbase-crew-controls";
 
 export default async function AdminShiftbasePage() {
   const configured = isShiftbaseConfigured();
   const exportEnabled = isShiftbaseHoursExportEnabled();
 
-  const [pending, synced, errored, errorEntries] = await Promise.all([
+  const [pending, synced, errored, errorEntries, shipsTotal, shipsActive, crewUsers, crewHours] = await Promise.all([
     prisma.timeEntry.count({ where: { shiftbaseSyncStatus: "PENDING" } }),
     prisma.timeEntry.count({ where: { shiftbaseSyncStatus: "SYNCED" } }),
     prisma.timeEntry.count({ where: { shiftbaseSyncStatus: "ERROR" } }),
@@ -18,6 +19,10 @@ export default async function AdminShiftbasePage() {
       orderBy: { updatedAt: "desc" },
       take: 20,
     }),
+    prisma.ship.count({ where: { shiftbaseDepartmentId: { not: null } } }),
+    prisma.ship.count({ where: { shiftbaseDepartmentId: { not: null }, active: true } }),
+    prisma.user.count({ where: { shiftbaseEmployeeId: { not: null } } }),
+    prisma.timeEntry.count({ where: { mode: "SHIFTBASE_IMPORT" } }),
   ]);
 
   return (
@@ -30,6 +35,38 @@ export default async function AdminShiftbasePage() {
           </p>
         </Card>
       )}
+
+      <Card>
+        <h2 className="mb-1 text-sm font-medium text-slate-700">Vaarbemanning importeren (River Roots)</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          Leest schepen (&quot;departments&quot;), medewerkers en goedgekeurde uren (laatste 35 dagen) uit
+          Shiftbase in -- alleen lezend, Shiftbase wordt hier nooit beschreven. Elk schip krijgt automatisch
+          een bijbehorend &quot;Vaarbemanning ...&quot;-project voor de uren. Nieuw gesyncte
+          schepen/projecten komen <strong>inactief</strong> binnen (niet elke Shiftbase-afdeling is een
+          echte boot, bv. &quot;Kantoor&quot;) -- activeer de daadwerkelijke schepen zelf via{" "}
+          <a href="/admin/ships" className="text-red-700 hover:underline">
+            Schepen
+          </a>
+          .
+        </p>
+        <div className="mb-4 flex justify-around text-center">
+          <div>
+            <p className="text-2xl font-semibold text-slate-900">
+              {shipsActive}/{shipsTotal}
+            </p>
+            <p className="text-xs text-slate-500">Schepen actief</p>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold text-slate-900">{crewUsers}</p>
+            <p className="text-xs text-slate-500">Medewerkers gekoppeld</p>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold text-slate-900">{crewHours}</p>
+            <p className="text-xs text-slate-500">Uren geimporteerd</p>
+          </div>
+        </div>
+        <ShiftbaseCrewControls />
+      </Card>
 
       <Card className="border-orange-300 bg-orange-50">
         <p className="text-sm text-orange-900">

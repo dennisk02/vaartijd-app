@@ -289,26 +289,77 @@ beheerder (`User.canLogOccupancy/Meals/Waste`).
   alle jaren op. Bij een volgende volledige sync komen er dus weer ~1300 rijen bij (waarvan
   ~130 `active`). Dat is verwacht gedrag, geen bug.
 
-### 10.3 Shiftbase — **lezen werkt, schrijven bewust geblokkeerd**
+### 10.3 Shiftbase — **vaarbemanning-import werkend, urenexport bewust geblokkeerd**
 
-- Module: `lib/shiftbase/client.ts` + `lib/shiftbase/hoursSync.ts`.
+- Modules: `lib/shiftbase/client.ts` (generieke REST-wrapper + verkenner-endpoint),
+  `lib/shiftbase/sync.ts` (nieuw, de vaarbemanning-import), `lib/shiftbase/hoursSync.ts` (oud,
+  urenexport-scaffold, nog geblokkeerd).
 - **Authenticatie (19 aug 2026, opgelost):** Shiftbase verwacht `Authorization: API <sleutel>`
   (letterlijk het woord `API` als prefix, bevestigd via developer.shiftbase.com) -- de client
   stuurde eerder een `Api-Key`-header, wat altijd een 401 gaf. Nu gefixt en geverifieerd (echte
   data opgehaald via de verkenner).
-- `/admin/shiftbase` bestaat uit twee losse delen:
-  1. **Verkenner** (alleen lezen) -- werkt, vrij te gebruiken.
-  2. **Urenexport** (schrijft naar `/timesheets`) -- endpoint/veldnamen in
-     `lib/shiftbase/hoursSync.ts` zijn **nooit bevestigd** tegen de echte API (overgenomen uit
-     een architectuurvoorstel). Nu de authenticatie werkt, zou een klik op "Nu synchroniseren"
-     ook daadwerkelijk bij Shiftbase aankomen -- mogelijk met een verkeerde payload. Daarom is
-     dit pad **hard geblokkeerd**, zowel de knop in de UI als de server action
-     (`lib/actions/shiftbase-sync.ts`) als de externe trigger-route
-     (`app/api/shiftbase/sync/route.ts`), totdat `SHIFTBASE_HOURS_EXPORT_ENABLED=true` expliciet
-     gezet wordt. Zet die pas aan nadat je via de verkenner het echte `/timesheets`-endpoint en
-     de veldnamen hebt bevestigd én `mapTimeEntryToShiftbase()` daarop is aangepast.
+
+**Belangrijke context:** dit Shiftbase-account bevat **twee compleet gescheiden groepen** die
+niets met elkaar te maken hebben:
+- ~270 horeca-achtige medewerkers (Kitchen/Housekeeping/Management/Bediening/...) verdeeld over
+  18 "departments" genaamd "Moods & Roots I" t/m "XIII" (plus een paar niet-schepen: "Kantoor",
+  "Quality", "Locatie Utrecht", "Moods&Roots | Events") -- dit is **de vaarbemanning van de
+  River Roots-vloot** (bevestigd door de klant), een heel andere vloot dan de bestaande
+  `Ship`-records in Vaartijd (Alegro, Triton, MS Kuiper, ...).
+- Verder niets -- er is geen "project"-concept in Shiftbase; uren zijn gekoppeld aan een
+  gebruiker + een department/team, niet aan een project zoals AFAS/Rentman dat kennen.
+
+#### Vaarbemanning-import (`/admin/shiftbase`, sectie "Vaarbemanning importeren")
+
+Leest (alleen lezend) Shiftbase-departments, -gebruikers en goedgekeurde uren van de laatste 35
+dagen in, en legt ze vast in Vaartijd:
+
+- Elke Shiftbase-**department** → een `Ship` (`Ship.shiftbaseDepartmentId`, uniek) **plus** een
+  bijbehorend `Project` genaamd `"Vaarbemanning <departmentnaam>"`
+  (`Project.shiftbaseDepartmentId`, uniek) -- dat project ontvangt de uren, want `TimeEntry`
+  vereist altijd een `projectId`. Nieuw gesyncte schepen/projecten komen **inactief** binnen: er
+  is geen betrouwbare naamregel om een echt schip (bv. "Moods&Roots I (Krimpen)") te
+  onderscheiden van een niet-schip ("Kantoor", "Quality") -- een beheerder activeert zelf de
+  echte boten via de bestaande Schepen-/Projecten-beheerschermen (die hebben inmiddels ook een
+  zoekveld, zie eerdere sectie over invoer-UX).
+- Elke Shiftbase-**gebruiker** → een Vaartijd `User` (`User.shiftbaseEmployeeId`, uniek). Deze
+  accounts zijn **niet bedoeld om mee in te loggen** (`active = false`, willekeurig
+  wachtwoord dat nergens wordt vastgelegd) -- puur om uren aan te kunnen koppelen. Er wordt
+  bewust **geen gevoelige data** overgenomen (geen BSN, geboortedatum, adres, loon) -- alleen
+  naam, e-mailadres en het Shiftbase-ID. Als het e-mailadres ontbreekt of al in gebruik is,
+  valt de sync terug op een placeholder-adres.
+- Elke goedgekeurde (`status: "Approved"`), niet-verwijderde Shiftbase-**timesheet** → een
+  `TimeEntry` met `mode = SHIFTBASE_IMPORT` en een uniek `shiftbaseTimesheetId` (voorkomt
+  dubbele import bij herhaald draaien). Deze rijen stromen automatisch mee in de bestaande
+  AFAS-exportpipeline (`afasSyncStatus` start op `PENDING`, zoals elke andere `TimeEntry`) --
+  zodra de AFAS-koppeling echt werkt (zie §10.1) hebben de bijbehorende "Vaarbemanning
+  ..."-projecten dus wel eerst een `afasProjectCode` nodig, net als bij Rentman-projecten.
+- **Performance-valkuil (ondervonden en opgelost):** een eerste, naïeve opzet deed een losse
+  `findUnique`+`upsert` per Shiftbase-rij (270+ medewerkers, duizenden uren-regels) en liep
+  daardoor vast op tientallen seconden tot minuten. De huidige opzet haalt alles in bulk op in
+  Maps en gebruikt `createMany`, en draait in een paar seconden. Hou dit patroon aan bij
+  vergelijkbare bulk-syncs.
+- Trigger: de "Nu importeren"-knop op `/admin/shiftbase`, of extern via
+  `POST/GET /api/shiftbase/crew-import` (secret: `SHIFTBASE_IMPORT_SECRET`, of admin-sessie).
+  **Nog geen cron ingesteld** -- draait alleen handmatig totdat bewust gekozen wordt dit ook
+  dagelijks te automatiseren (zie §14 voor de Vercel Hobby-cronlimiet).
+
+#### Urenexport (nog steeds geblokkeerd, ongewijzigd)
+
+`/admin/shiftbase` heeft daarnaast nog het oorspronkelijke, **tegenovergestelde**-richting
+onderdeel: uren van Vaartijd náár Shiftbase schrijven (`/timesheets` als schrijfdoel). Endpoint
+en veldnamen daarvoor zijn **nooit bevestigd** tegen de echte API (overgenomen uit een
+architectuurvoorstel). Nu de authenticatie werkt, zou een klik op "Nu synchroniseren" ook
+daadwerkelijk bij Shiftbase aankomen -- mogelijk met een verkeerde payload. Daarom blijft dit
+pad **hard geblokkeerd**, zowel de knop in de UI als de server action
+(`lib/actions/shiftbase-sync.ts`) als de externe trigger-route
+(`app/api/shiftbase/sync/route.ts`), totdat `SHIFTBASE_HOURS_EXPORT_ENABLED=true` expliciet
+gezet wordt. Zet die pas aan nadat je via de verkenner het echte `/timesheets`-endpoint en de
+veldnamen hebt bevestigd én `mapTimeEntryToShiftbase()` daarop is aangepast.
+
 - Env vars: `SHIFTBASE_API_KEY`, `SHIFTBASE_BASE_URL` (optioneel), `SHIFTBASE_SYNC_SECRET`,
-  `SHIFTBASE_HOURS_EXPORT_ENABLED` (default uit).
+  `SHIFTBASE_HOURS_EXPORT_ENABLED` (default uit), `SHIFTBASE_IMPORT_SECRET` (voor de
+  vaarbemanning-import hierboven -- andere richting, ander secret).
 
 ### 10.4 Rentman MCP-server — **verkend, niet afgebouwd**
 
@@ -374,6 +425,7 @@ Volledige, actuele lijst — zie ook [`.env.example`](.env.example).
 | `SHIFTBASE_BASE_URL` | optioneel | Override van de standaard Shiftbase-basis-URL |
 | `SHIFTBASE_SYNC_SECRET` | optioneel | Secret voor externe trigger van `/api/shiftbase/sync` |
 | `SHIFTBASE_HOURS_EXPORT_ENABLED` | optioneel | Moet letterlijk `true` zijn om de (nog ongeverifieerde) urenexport te laten schrijven — **bewust uit** in productie, zie §10.3 |
+| `SHIFTBASE_IMPORT_SECRET` | optioneel | Secret voor externe trigger van `/api/shiftbase/crew-import` (vaarbemanning-import, andere richting dan `SHIFTBASE_SYNC_SECRET`) |
 | `RENTMAN_API_TOKEN` | optioneel (maar actief in gebruik) | Rentman API-token — **ingevuld in productie, werkend** |
 | `RENTMAN_SYNC_SECRET` | optioneel (maar actief in gebruik) | Secret voor `/api/rentman/sync`, **moet gelijk zijn aan** `CRON_SECRET` |
 | `CRON_SECRET` | ja, voor de cron | Vercel Cron stuurt dit automatisch mee als Bearer-token |
@@ -515,13 +567,18 @@ Gesorteerd op vermoedelijke prioriteit voor de klant:
    `Authorization: API <key>`-header); schrijven staat bewust hard geblokkeerd achter
    `SHIFTBASE_HOURS_EXPORT_ENABLED` totdat het `/timesheets`-endpoint en de veldnamen zijn
    bevestigd via de verkenner op `/admin/shiftbase`. Zie §10.3.
-4. **Geen "wachtwoord vergeten"/zelf-wijzigen voor medewerkers** — een beheerder moet nu
+4. **Shiftbase-vaarbemanning-import: schepen/projecten nog te curaten** — de import zet alle
+   18 River Roots-departments als inactieve `Ship`/`Project` klaar; een beheerder moet zelf de
+   echte schepen activeren (via Schepen/Projecten) en er een `afasProjectCode` aan hangen
+   voordat de bijbehorende uren richting AFAS kunnen. Ook nog geen cron ingesteld -- draait nu
+   alleen handmatig. Zie §10.3.
+5. **Geen "wachtwoord vergeten"/zelf-wijzigen voor medewerkers** — een beheerder moet nu
    handmatig een nieuw tijdelijk wachtwoord zetten.
-5. **Geen geautomatiseerde tests** — zie §16.
-6. **Eenmalige Rentman-opschoning is geen blijvend jaarfilter** — een toekomstige volledige
+6. **Geen geautomatiseerde tests** — zie §16.
+7. **Eenmalige Rentman-opschoning is geen blijvend jaarfilter** — een toekomstige volledige
    sync haalt weer alle historische/toekomstige jaren op (bewust zo afgesproken, zie §10.2,
    maar goed om te weten voor wie hier niet bij was).
-7. **Rapportagepagina's en admin-schermen zijn Nederlandstalig** — vertaling is nooit
+8. **Rapportagepagina's en admin-schermen zijn Nederlandstalig** — vertaling is nooit
    meegenomen (bewuste keuze, niet vergeten of kapot).
 
 ---

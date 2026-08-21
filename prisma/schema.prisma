@@ -50,6 +50,8 @@ enum MealType {
 enum TimeEntryMode {
   TIMER
   MANUAL
+  /// Geimporteerd uit Shiftbase (vaarbemanning-uren) -- zie lib/shiftbase/sync.ts.
+  SHIFTBASE_IMPORT
 }
 
 model User {
@@ -59,7 +61,7 @@ model User {
   passwordHash       String
   role               Role            @default(EMPLOYEE)
   afasEmployeeNumber String?
-  shiftbaseEmployeeId String?
+  shiftbaseEmployeeId String?        @unique
   language           Language        @default(NL)
   active             Boolean         @default(true)
   canLogOccupancy    Boolean         @default(true)
@@ -98,6 +100,11 @@ model Project {
   rentmanStatus        String?
   rentmanStartsAt      DateTime?
   rentmanEndsAt        DateTime?
+
+  /// Automatisch aangemaakt "vaarbemanning"-project bij een Shiftbase-
+  /// afdeling (1 project per schip) -- zie lib/shiftbase/sync.ts. Null
+  /// betekent geen koppeling met Shiftbase.
+  shiftbaseDepartmentId String? @unique
 }
 
 model Ship {
@@ -113,6 +120,14 @@ model Ship {
   timeEntries   TimeEntry[]
   activeTimers  ActiveTimer[]
   assignedUsers User[]          @relation("UserShips")
+
+  /// Herkomst uit Shiftbase (read-only sync, "department" = schip in de
+  /// River Roots-vloot) -- null betekent handmatig aangemaakt. Nieuw
+  /// gesyncte schepen komen inactief binnen; een beheerder activeert de
+  /// daadwerkelijke boten (sommige Shiftbase-afdelingen zijn geen schip,
+  /// bv. "Kantoor"). Zie lib/shiftbase/sync.ts.
+  shiftbaseDepartmentId String? @unique
+  shiftbaseDepartmentName String?
 }
 
 model TimeEntry {
@@ -138,6 +153,10 @@ model TimeEntry {
   shiftbaseError      String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+
+  /// Bij mode = SHIFTBASE_IMPORT: het bronrecord in Shiftbase (timesheet-id),
+  /// zodat een herhaalde import dezelfde rij bijwerkt i.p.v. dupliceert.
+  shiftbaseTimesheetId String? @unique
 
   @@index([userId, date])
   @@index([afasSyncStatus])
