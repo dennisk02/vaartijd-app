@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/dal";
 import { syncPendingTimeEntries } from "@/lib/shiftbase/hoursSync";
+import { isShiftbaseHoursExportEnabled } from "@/lib/shiftbase/client";
 
 export type ShiftbaseSyncActionState =
   | {
@@ -13,6 +14,15 @@ export type ShiftbaseSyncActionState =
 
 export async function syncShiftbaseNow(_state: ShiftbaseSyncActionState): Promise<ShiftbaseSyncActionState> {
   await requireAdmin();
+
+  if (!isShiftbaseHoursExportEnabled()) {
+    return {
+      error:
+        "Urenexport naar Shiftbase staat uit -- het endpoint/de veldnamen zijn nog niet geverifieerd. " +
+        "Bevestig eerst via de verkenner hieronder en zet dan SHIFTBASE_HOURS_EXPORT_ENABLED=true.",
+    };
+  }
+
   const processed = await syncPendingTimeEntries();
   revalidatePath("/admin/shiftbase");
   revalidatePath("/uren");

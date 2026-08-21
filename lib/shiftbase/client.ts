@@ -24,6 +24,18 @@ export function isShiftbaseConfigured() {
 }
 
 /**
+ * Of de (schrijvende) urenexport mag draaien. Staat los van
+ * `isShiftbaseConfigured()`: de API-sleutel kan prima aanwezig en geldig
+ * zijn (leesverkeer werkt dan al) terwijl het `/timesheets`-endpoint en de
+ * veldnamen in `lib/shiftbase/hoursSync.ts` nog niet bevestigd zijn tegen de
+ * echte Shiftbase-API. Zet `SHIFTBASE_HOURS_EXPORT_ENABLED=true` pas nadat
+ * dat via de verkenner op /admin/shiftbase is geverifieerd.
+ */
+export function isShiftbaseHoursExportEnabled() {
+  return process.env.SHIFTBASE_HOURS_EXPORT_ENABLED === "true";
+}
+
+/**
  * Doet een read-only GET-aanroep naar de Shiftbase REST API. `pathAndQuery`
  * is het pad + eventuele querystring zoals gedocumenteerd op
  * developer.shiftbase.com, bv. `/timesheets?min_date=2026-07-01&max_date=2026-07-07`.
@@ -44,7 +56,10 @@ export async function shiftbaseGet(pathAndQuery: string) {
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "Api-Key": config.apiKey,
+      // Shiftbase verwacht dit letterlijk als "Authorization: API <key>" --
+      // bevestigd tegen de echte API; een "Api-Key"-header (wat hier eerder
+      // stond, ongeverifieerd) wordt genegeerd en geeft een 401.
+      Authorization: `API ${config.apiKey}`,
       Accept: "application/json",
     },
   });
@@ -85,7 +100,7 @@ export async function shiftbasePost(pathAndQuery: string, body: unknown) {
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      "Api-Key": config.apiKey,
+      Authorization: `API ${config.apiKey}`,
       "Content-Type": "application/json",
       Accept: "application/json",
     },

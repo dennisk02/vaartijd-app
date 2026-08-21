@@ -1,5 +1,6 @@
 import { getSessionPayload } from "@/lib/session";
 import { syncPendingTimeEntries } from "@/lib/shiftbase/hoursSync";
+import { isShiftbaseHoursExportEnabled } from "@/lib/shiftbase/client";
 
 export async function POST(request: Request) {
   const providedSecret = request.headers.get("x-sync-secret");
@@ -14,6 +15,13 @@ export async function POST(request: Request) {
     if (session.role !== "ADMIN") {
       return new Response(null, { status: 403 });
     }
+  }
+
+  if (!isShiftbaseHoursExportEnabled()) {
+    return Response.json(
+      { error: "Urenexport staat uit (SHIFTBASE_HOURS_EXPORT_ENABLED is niet 'true')." },
+      { status: 409 }
+    );
   }
 
   const synced = await syncPendingTimeEntries();

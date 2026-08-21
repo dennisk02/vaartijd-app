@@ -289,14 +289,26 @@ beheerder (`User.canLogOccupancy/Meals/Waste`).
   alle jaren op. Bij een volgende volledige sync komen er dus weer ~1300 rijen bij (waarvan
   ~130 `active`). Dat is verwacht gedrag, geen bug.
 
-### 10.3 Shiftbase — **scaffold, expliciet ongeverifieerd**
+### 10.3 Shiftbase — **lezen werkt, schrijven bewust geblokkeerd**
 
 - Module: `lib/shiftbase/client.ts` + `lib/shiftbase/hoursSync.ts`.
-- `/admin/shiftbase` is een read-only API-verkenner (om de Shiftbase-datastructuur te
-  bekijken) plus een urenexport-scaffold die **in de UI zelf als "ongeverifieerd"** is
-  gemarkeerd. Niet gebruiken in productie zonder eerst tegen een echte Shiftbase-omgeving te
-  testen.
-- Env vars: `SHIFTBASE_API_KEY`, `SHIFTBASE_BASE_URL` (optioneel), `SHIFTBASE_SYNC_SECRET`.
+- **Authenticatie (19 aug 2026, opgelost):** Shiftbase verwacht `Authorization: API <sleutel>`
+  (letterlijk het woord `API` als prefix, bevestigd via developer.shiftbase.com) -- de client
+  stuurde eerder een `Api-Key`-header, wat altijd een 401 gaf. Nu gefixt en geverifieerd (echte
+  data opgehaald via de verkenner).
+- `/admin/shiftbase` bestaat uit twee losse delen:
+  1. **Verkenner** (alleen lezen) -- werkt, vrij te gebruiken.
+  2. **Urenexport** (schrijft naar `/timesheets`) -- endpoint/veldnamen in
+     `lib/shiftbase/hoursSync.ts` zijn **nooit bevestigd** tegen de echte API (overgenomen uit
+     een architectuurvoorstel). Nu de authenticatie werkt, zou een klik op "Nu synchroniseren"
+     ook daadwerkelijk bij Shiftbase aankomen -- mogelijk met een verkeerde payload. Daarom is
+     dit pad **hard geblokkeerd**, zowel de knop in de UI als de server action
+     (`lib/actions/shiftbase-sync.ts`) als de externe trigger-route
+     (`app/api/shiftbase/sync/route.ts`), totdat `SHIFTBASE_HOURS_EXPORT_ENABLED=true` expliciet
+     gezet wordt. Zet die pas aan nadat je via de verkenner het echte `/timesheets`-endpoint en
+     de veldnamen hebt bevestigd én `mapTimeEntryToShiftbase()` daarop is aangepast.
+- Env vars: `SHIFTBASE_API_KEY`, `SHIFTBASE_BASE_URL` (optioneel), `SHIFTBASE_SYNC_SECRET`,
+  `SHIFTBASE_HOURS_EXPORT_ENABLED` (default uit).
 
 ### 10.4 Rentman MCP-server — **verkend, niet afgebouwd**
 
@@ -358,9 +370,10 @@ Volledige, actuele lijst — zie ook [`.env.example`](.env.example).
 | `AFAS_TOKEN` | optioneel | AFAS App Connector-token — **nog leeg in productie** |
 | `AFAS_HOURS_CONNECTOR` | optioneel | Naam van de AFAS UpdateConnector voor uren |
 | `AFAS_SYNC_SECRET` | optioneel | Secret voor externe trigger van `/api/afas/sync` |
-| `SHIFTBASE_API_KEY` | optioneel | Shiftbase API-sleutel |
+| `SHIFTBASE_API_KEY` | optioneel | Shiftbase API-sleutel — **ingevuld in productie, lezen werkt** |
 | `SHIFTBASE_BASE_URL` | optioneel | Override van de standaard Shiftbase-basis-URL |
 | `SHIFTBASE_SYNC_SECRET` | optioneel | Secret voor externe trigger van `/api/shiftbase/sync` |
+| `SHIFTBASE_HOURS_EXPORT_ENABLED` | optioneel | Moet letterlijk `true` zijn om de (nog ongeverifieerde) urenexport te laten schrijven — **bewust uit** in productie, zie §10.3 |
 | `RENTMAN_API_TOKEN` | optioneel (maar actief in gebruik) | Rentman API-token — **ingevuld in productie, werkend** |
 | `RENTMAN_SYNC_SECRET` | optioneel (maar actief in gebruik) | Secret voor `/api/rentman/sync`, **moet gelijk zijn aan** `CRON_SECRET` |
 | `CRON_SECRET` | ja, voor de cron | Vercel Cron stuurt dit automatisch mee als Bearer-token |
@@ -498,8 +511,10 @@ Gesorteerd op vermoedelijke prioriteit voor de klant:
 2. **Rentman → AFAS verkoopfacturen + PDF-bijlage + betaal-terugkoppeling** — plan is met de
    klant besproken en de Rentman-kant is technisch geverifieerd (MCP), maar er is nog geen
    regel code voor geschreven. Zie §10.4 voor de volledige stand van zaken.
-3. **Shiftbase-urenexport ongeverifieerd** — niet gebruiken zonder eerst tegen een echte
-   Shiftbase-omgeving te testen.
+3. **Shiftbase-urenexport ongeverifieerd** — lezen is bevestigd werkend (correcte
+   `Authorization: API <key>`-header); schrijven staat bewust hard geblokkeerd achter
+   `SHIFTBASE_HOURS_EXPORT_ENABLED` totdat het `/timesheets`-endpoint en de veldnamen zijn
+   bevestigd via de verkenner op `/admin/shiftbase`. Zie §10.3.
 4. **Geen "wachtwoord vergeten"/zelf-wijzigen voor medewerkers** — een beheerder moet nu
    handmatig een nieuw tijdelijk wachtwoord zetten.
 5. **Geen geautomatiseerde tests** — zie §16.

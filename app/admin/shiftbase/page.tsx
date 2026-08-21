@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { isShiftbaseConfigured } from "@/lib/shiftbase/client";
+import { isShiftbaseConfigured, isShiftbaseHoursExportEnabled } from "@/lib/shiftbase/client";
 import { Card, SyncStatusBadge } from "@/components/ui";
 import { ShiftbaseExplorer } from "@/components/admin/shiftbase-explorer";
 import { ShiftbaseHoursControls } from "@/components/admin/shiftbase-hours-controls";
 
 export default async function AdminShiftbasePage() {
   const configured = isShiftbaseConfigured();
+  const exportEnabled = isShiftbaseHoursExportEnabled();
 
   const [pending, synced, errored, errorEntries] = await Promise.all([
     prisma.timeEntry.count({ where: { shiftbaseSyncStatus: "PENDING" } }),
@@ -36,6 +37,7 @@ export default async function AdminShiftbasePage() {
           (<code>/timesheets</code>) en veldnamen. Gebruik de verkenner onderaan deze pagina om de
           werkelijke Shiftbase-API te bevestigen voordat je hierop vertrouwt -- pas daarna
           <code> lib/shiftbase/hoursSync.ts</code> aan met de juiste veldnamen.
+          {!exportEnabled && " De knop hieronder is daarom voorlopig geblokkeerd."}
         </p>
       </Card>
 
@@ -57,7 +59,7 @@ export default async function AdminShiftbasePage() {
       </Card>
 
       <Card>
-        <ShiftbaseHoursControls />
+        <ShiftbaseHoursControls exportEnabled={exportEnabled} />
       </Card>
 
       {errorEntries.length > 0 && (
