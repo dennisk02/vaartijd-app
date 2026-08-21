@@ -2,7 +2,7 @@
 
 **Voor:** de partij die onderhoud en verdere ontwikkeling van deze app overneemt.
 **Opdrachtgever:** Kuipers Beheer BV ([info@kuipersbeheerbv.nl](mailto:info@kuipersbeheerbv.nl))
-**Laatst bijgewerkt:** 19 augustus 2026
+**Laatst bijgewerkt:** 21 augustus 2026
 **Productie-URL:** https://vaartijd-app.vercel.app
 
 Dit document is de centrale referentie voor iedereen die na de initiële bouw aan deze app
@@ -27,12 +27,17 @@ en waarmee beheerders:
 - per medewerker instellen welke onderdelen zichtbaar zijn en of ze een vast project hebben,
 - rapportages bekijken (uren, bezetting, maaltijden, afval — met periodekeuze),
 - de koppelingen met AFAS Profit (uren-export), Rentman (projectimport, read-only) en
-  Shiftbase (verkenner) beheren.
+  Shiftbase (vaarbemanning-import + verkenner, read-only) beheren.
 
 De twee bedrijfsonderdelen "Events" (administratie 02) en "Evento" (administratie 21) worden
 in de hele app uit elkaar gehouden op basis van een naamconventie: een project dat uit Rentman
 komt en waarvan de naam begint met `"EVENTO - "` hoort bij Evento; alle andere projecten horen
 bij Events. Zie [§10.2](#102-rentman-read-only-projectimport) en `lib/assignments.ts`.
+
+Daarnaast is er een **derde, aparte groep**: de vaarbemanning van de River Roots-vloot (~270
+mensen, Kitchen/Housekeeping/Management-rollen per schip), die niet in Rentman zit maar in
+Shiftbase wordt bijgehouden en sinds 21 aug 2026 automatisch wordt geïmporteerd. Zie §10.3
+hieronder.
 
 ---
 
@@ -81,9 +86,10 @@ app/                          # App Router — pagina's + API routes
   admin/                      # Beheerscherm (guard: requireAdmin() in app/admin/layout.tsx)
     afas/ projects/ rapportages/ rentman/ ships/ shiftbase/ users/
   api/
-    afas/sync/route.ts        # Externe trigger (cron/secret) voor AFAS-export
-    rentman/sync/route.ts     # Externe trigger (cron/secret) voor Rentman-import
-    shiftbase/sync/route.ts   # Externe trigger (cron/secret) voor Shiftbase-export
+    afas/sync/route.ts            # Externe trigger (cron/secret) voor AFAS-export
+    rentman/sync/route.ts         # Externe trigger (cron/secret) voor Rentman-import
+    shiftbase/crew-import/route.ts # Externe trigger voor Shiftbase-vaarbemanning-import (lezend, werkend)
+    shiftbase/sync/route.ts       # Externe trigger voor Shiftbase-urenexport (schrijvend, nog geblokkeerd)
   uren/ scheepsbezetting/ maaltijden/ afval/ geschiedenis/ dag-indienen/  # Medewerkerschermen
   login/  page.tsx (home-dashboard)  layout.tsx (root)
   forbidden.tsx  unauthorized.tsx
@@ -108,7 +114,9 @@ lib/
   actions/                    # "use server" — alle mutaties, per domein
   afas/                       # AFAS Profit REST-koppeling (client + hoursSync)
   rentman/                    # Rentman REST-koppeling (client + sync)
-  shiftbase/                  # Shiftbase-koppeling (client + hoursSync, ongeverifieerd)
+  shiftbase/                  # Shiftbase-koppeling: client.ts (verkenner) + sync.ts
+                               # (vaarbemanning-import, lezend, werkend) + hoursSync.ts
+                               # (urenexport, schrijvend, nog geblokkeerd/ongeverifieerd)
 
 prisma/
   schema.prisma                # Datamodel — zie §5
@@ -131,13 +139,17 @@ Volledige bron: [`prisma/schema.prisma`](prisma/schema.prisma). Kernpunten per m
   `defaultProjectId`), `projectGroup` (`ALL`/`EVENTS`/`EVENTO`, bepaalt welke projecten
   iemand standaard ziet), koppelvelden voor AFAS (`afasEmployeeNumber`) en Shiftbase
   (`shiftbaseEmployeeId`).
-- **`Project`** — kan handmatig aangemaakt zijn óf uit Rentman komen
-  (`rentmanSubprojectId` e.a. `rentman*`-velden gevuld). `active` bepaalt of een project
-  kiesbaar is bij urenregistratie.
-- **`Ship`** — optioneel een `capacity` (Int?) voor de capaciteitsbalk bij bezetting.
-- **`TimeEntry`** — één urenregistratie. `mode` is `TIMER` of `MANUAL`. Aparte syncstatus-
-  velden voor **zowel** AFAS als Shiftbase (`afasSyncStatus`/`shiftbaseSyncStatus`, elk met
-  `SyncedAt`/`Error`), zodat de twee koppelingen onafhankelijk van elkaar hun status bijhouden.
+- **`Project`** — kan handmatig aangemaakt zijn, uit Rentman komen
+  (`rentmanSubprojectId` e.a. `rentman*`-velden gevuld), of automatisch aangemaakt zijn als
+  "vaarbemanning"-project bij een Shiftbase-schip (`shiftbaseDepartmentId`, uniek — zie §10.3).
+  `active` bepaalt of een project kiesbaar is bij urenregistratie.
+- **`Ship`** — optioneel een `capacity` (Int?) voor de capaciteitsbalk bij bezetting. Kan ook
+  uit Shiftbase komen (`shiftbaseDepartmentId` + `shiftbaseDepartmentName`, uniek — §10.3).
+- **`TimeEntry`** — één urenregistratie. `mode` is `TIMER`, `MANUAL` of `SHIFTBASE_IMPORT`
+  (geïmporteerd vanuit Shiftbase, herkenbaar aan een gevuld `shiftbaseTimesheetId`, uniek, dat
+  dubbele import bij herhaald syncen voorkomt). Aparte syncstatus-velden voor **zowel** AFAS
+  als Shiftbase (`afasSyncStatus`/`shiftbaseSyncStatus`, elk met `SyncedAt`/`Error`), zodat de
+  twee koppelingen onafhankelijk van elkaar hun status bijhouden.
 - **`ActiveTimer`** — server-side "lopende dienst"; 1 per gebruiker (`userId @unique`). Bij
   stoppen wordt hieruit een `TimeEntry` gemaakt en de rij verwijderd.
 - **`ShipOccupancy`** — passagiers + bemanning per schip/datum/dagdeel. Uniek per
@@ -154,7 +166,10 @@ Volledige bron: [`prisma/schema.prisma`](prisma/schema.prisma). Kernpunten per m
 **Indexen:** naast de voor de hand liggende unieke constraints staan er `@@index`'en op
 `TimeEntry(userId, date)`, `TimeEntry(afasSyncStatus)`, `TimeEntry(shiftbaseSyncStatus)` en op
 `ShipOccupancy/MealCount/FoodWaste(createdById, date)` — dat laatste stel is toegevoegd omdat
-elke dashboard-/geschiedenispagina daar exact op filtert.
+elke dashboard-/geschiedenispagina daar exact op filtert. Verder zijn `Ship.shiftbaseDepartmentId`,
+`Project.shiftbaseDepartmentId`, `User.shiftbaseEmployeeId` en `TimeEntry.shiftbaseTimesheetId`
+allemaal uniek — dat zijn de sleutels waarop de Shiftbase-vaarbemanning-import upsert (zie
+§10.3), net zoals `Project.rentmanSubprojectId` dat voor Rentman doet.
 
 ---
 
@@ -204,7 +219,7 @@ beheerder (`User.canLogOccupancy/Meals/Waste`).
 | `/admin/users` → `/admin/users/[id]` | Medewerkers aanmaken; per medewerker: projectgroep, specifieke project-/scheepstoewijzing (doorzoekbaar), zichtbare onderdelen, vast project, Shiftbase-ID |
 | `/admin/rentman` | Rentman-syncstatus, handmatige sync-trigger, lijst laatst-gesyncte projecten |
 | `/admin/afas` | AFAS-syncstatus (pending/synced/error-tellingen + foutmeldingen) |
-| `/admin/shiftbase` | Read-only API-verkenner + (ongeverifieerde) urenexport-status |
+| `/admin/shiftbase` | Vaarbemanning-import (River Roots, werkend) + read-only API-verkenner + (ongeverifieerde, geblokkeerde) urenexport-status |
 
 ---
 
@@ -568,8 +583,9 @@ Gesorteerd op vermoedelijke prioriteit voor de klant:
    `SHIFTBASE_HOURS_EXPORT_ENABLED` totdat het `/timesheets`-endpoint en de veldnamen zijn
    bevestigd via de verkenner op `/admin/shiftbase`. Zie §10.3.
 4. **Shiftbase-vaarbemanning-import: schepen/projecten nog te curaten** — de import zet alle
-   18 River Roots-departments als inactieve `Ship`/`Project` klaar; een beheerder moet zelf de
-   echte schepen activeren (via Schepen/Projecten) en er een `afasProjectCode` aan hangen
+   18 River Roots-departments als inactieve `Ship`/`Project` klaar (op één na: "Moods&Roots I
+   (Krimpen)" is tijdens het testen al geactiveerd als voorbeeld); een beheerder moet de overige
+   echte schepen zelf activeren (via Schepen/Projecten) en er een `afasProjectCode` aan hangen
    voordat de bijbehorende uren richting AFAS kunnen. Ook nog geen cron ingesteld -- draait nu
    alleen handmatig. Zie §10.3.
 5. **Geen "wachtwoord vergeten"/zelf-wijzigen voor medewerkers** — een beheerder moet nu

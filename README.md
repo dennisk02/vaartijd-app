@@ -12,10 +12,12 @@ Registratie van uren op projecten, scheepsbezetting per dag/nacht en maaltijden/
    - `DATABASE_URL` / `DATABASE_URL_UNPOOLED` — een eigen Postgres-database (bv. een nieuw Neon-project, los van andere apps).
    - `SESSION_SECRET` — genereer met `openssl rand -base64 32`.
    - De `AFAS_*`-variabelen mogen leeg blijven om te beginnen; de app werkt dan gewoon door, met uren die op "Wacht op sync" blijven staan.
-2. Installeer dependencies en zet de database op:
+2. Installeer dependencies en zet de database op (past de bestaande, meegecommite migraties toe --
+   gebruik `migrate dev` alleen als je zelf een nieuwe schemawijziging aan het maken bent, zie
+   [`HANDOVER.md` §12](HANDOVER.md#12-database--migraties)):
    ```bash
    npm install
-   npx prisma migrate dev --name init
+   npx prisma migrate deploy
    npm run seed
    ```
    De seed maakt een beheerder-account (`admin@kuipersbeheerbv.nl`, wachtwoord zie console-output, of stel `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` in voordat je `npm run seed` draait).
@@ -34,10 +36,9 @@ De uren-registraties staan standaard op status "Wacht op sync". Zodra de AFAS Ap
 3. Pas de payload-mapping aan in [`lib/afas/hoursSync.ts`](lib/afas/hoursSync.ts) (functie `mapTimeEntryToAfas`) zodra de exacte veldnamen van de AFAS UpdateConnector bekend zijn — dat is de enige plek die hiervoor aangepast hoeft te worden.
 4. Test de verbinding en start een synchronisatie via `/admin/afas`.
 
-## Belangrijkste mappen
+## Projectstructuur, integraties, deployment
 
-- `app/` — pagina's en server actions per scherm (App Router).
-- `lib/actions/` — server actions (mutaties) per domein.
-- `lib/afas/` — de AFAS-koppelmodule (client + uren-synchronisatie).
-- `lib/session.ts` / `lib/dal.ts` — sessiebeheer en autorisatie (Data Access Layer).
-- `prisma/schema.prisma` — datamodel.
+Zie [`HANDOVER.md`](HANDOVER.md) — daar staat de volledige, actuele projectstructuur (§4),
+uitleg per integratie (AFAS/Rentman/Shiftbase, §10) en de deploy-workflow (§13). Dat bestand
+wordt bijgehouden als centrale bron; deze README houdt bewust alleen de lokale-opstart-stappen
+hierboven bij om dubbele/verouderde documentatie te voorkomen.
