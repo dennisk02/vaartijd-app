@@ -76,6 +76,25 @@ export default async function DagIndienenPage() {
           <Card className="border-red-200 bg-red-50 text-sm font-semibold text-red-800">
             {dict.alreadySubmitted}
           </Card>
+        ) : !summary.hasHours ? (
+          <>
+            <Card className="flex items-start gap-3 border-amber-300 bg-amber-50">
+              <div className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-amber-500 text-sm font-extrabold text-white">
+                !
+              </div>
+              <p className="text-sm leading-relaxed text-amber-900">{dict.noHoursWarning}</p>
+            </Card>
+            <Link href="/uren" className="block">
+              <Button type="button" className="w-full py-4 text-base">
+                {dict.logHoursFirst}
+              </Button>
+            </Link>
+            <form action={submitDay.bind(null, todayStr)}>
+              <Button type="submit" variant="secondary" className="w-full py-3 text-sm">
+                {dict.submitWithoutHours}
+              </Button>
+            </form>
+          </>
         ) : (
           <>
             <Card className="flex items-start gap-3 bg-slate-50">

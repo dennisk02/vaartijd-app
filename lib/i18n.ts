@@ -91,6 +91,9 @@ export interface Dictionary {
   confirmNote: string;
   submitDay: string;
   alreadySubmitted: string;
+  noHoursWarning: string;
+  logHoursFirst: string;
+  submitWithoutHours: string;
 
   loginSub: string;
   email: string;
@@ -188,6 +191,9 @@ const nl: Dictionary = {
   edit: "Wijzig",
   confirmNote: "Ik bevestig dat bovenstaande gegevens voor deze dag kloppen.",
   submitDay: "Dag indienen",
+  noHoursWarning: "Je hebt nog geen uren geregistreerd voor vandaag.",
+  logHoursFirst: "Eerst uren registreren",
+  submitWithoutHours: "Toch indienen zonder uren",
   alreadySubmitted: "Deze dag is al ingediend.",
 
   loginSub: "Log in met je account",
@@ -286,6 +292,9 @@ const en: Dictionary = {
   edit: "Edit",
   confirmNote: "I confirm the entries above are correct for this day.",
   submitDay: "Submit day",
+  noHoursWarning: "You haven't logged any hours for today yet.",
+  logHoursFirst: "Log hours first",
+  submitWithoutHours: "Submit anyway without hours",
   alreadySubmitted: "This day has already been submitted.",
 
   loginSub: "Log in with your account",
@@ -384,6 +393,9 @@ const uk: Dictionary = {
   edit: "Змінити",
   confirmNote: "Я підтверджую, що вищезазначені дані за цей день правильні.",
   submitDay: "Подати день",
+  noHoursWarning: "Ви ще не зареєстрували годин на сьогодні.",
+  logHoursFirst: "Спочатку зареєструвати години",
+  submitWithoutHours: "Все одно подати без годин",
   alreadySubmitted: "Цей день вже подано.",
 
   loginSub: "Увійдіть у свій обліковий запис",
@@ -482,6 +494,9 @@ const ar: Dictionary = {
   edit: "تعديل",
   confirmNote: "أؤكد أن البيانات أعلاه صحيحة لهذا اليوم.",
   submitDay: "إرسال اليوم",
+  noHoursWarning: "لم تسجّل أي ساعات لهذا اليوم بعد.",
+  logHoursFirst: "سجّل الساعات أولاً",
+  submitWithoutHours: "إرسال على أي حال بدون ساعات",
   alreadySubmitted: "تم إرسال هذا اليوم بالفعل.",
 
   loginSub: "سجّل الدخول إلى حسابك",
