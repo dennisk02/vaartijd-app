@@ -1,9 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { saveManualMonthlyEntry } from "@/lib/actions/rentman-dashboard";
 import { Card, Field, Input, Select, TextArea, Button } from "@/components/ui";
-import { formatEuro, formatMonthLabel } from "./format";
+import { ChartTooltip } from "@/components/admin/reports/chart-tooltip";
+import { dash } from "./colors";
+import { Callout, ChartCard } from "./kpi-card";
+import { formatEuro, formatMonthLabel, formatMonthLabelLong } from "./format";
 
 type ManualEntry = {
   id: string;
@@ -21,6 +25,16 @@ type ManualEntry = {
 
 const LOCATIONS = ["EVENTO", "M&R Kampen", "M&R Utrecht"];
 
+const INDICATOR_ROWS: { key: keyof ManualEntry; label: string; indent?: boolean; isEuro?: boolean }[] = [
+  { key: "revenueTotal", label: "Omzet totaal (Rentman)", isEuro: true },
+  { key: "deliveryRevenue", label: "waarvan bezorgen", indent: true, isEuro: true },
+  { key: "pickupRevenue", label: "waarvan afhaal", indent: true, isEuro: true },
+  { key: "newRequests", label: "Nieuwe aanvragen" },
+  { key: "inOption", label: "In optie" },
+  { key: "confirmed", label: "Bevestigd" },
+  { key: "cancelled", label: "Geannuleerd" },
+];
+
 export function MaandoverlegTab({
   invoicedMonthly,
   manualEntries,
@@ -35,11 +49,60 @@ export function MaandoverlegTab({
     return [...acc, { ...row, cumulative: previous + row.invoicedExclVat }];
   }, []);
   const total = invoicedMonthly.reduce((sum, r) => sum + r.invoicedExclVat, 0);
+  const chartInvoiced = invoicedMonthly.map((r) => ({ month: formatMonthLabel(r.month), "Gefactureerd excl. BTW": Math.round(r.invoicedExclVat) }));
+
+  const eventoByMonth = new Map<string, ManualEntry>();
+  for (const e of manualEntries) if (e.location === "EVENTO") eventoByMonth.set(e.month, e);
+  const chartAanvragen = months.map((m) => {
+    const e = eventoByMonth.get(m);
+    return { month: formatMonthLabel(m), Nieuw: e?.newRequests ?? 0, "In optie": e?.inOption ?? 0, Bevestigd: e?.confirmed ?? 0, Geannuleerd: e?.cancelled ?? 0 };
+  });
+
+  const entriesByMonth = new Map<string, ManualEntry[]>();
+  for (const e of manualEntries) {
+    const arr = entriesByMonth.get(e.month) ?? [];
+    arr.push(e);
+    entriesByMonth.set(e.month, arr);
+  }
+  const monthsWithEntries = [...entriesByMonth.keys()].sort().reverse();
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3.5">
+      <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
+        <ChartCard title="Gefactureerd per factuurdatum" sub="Excl. BTW · Op factuurdatum — aansluiting AFAS" height={200}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartInvoiced}>
+              <CartesianGrid vertical={false} stroke="#F3F4F6" />
+              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
+              <Tooltip
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => formatEuro(v)} />}
+                cursor={{ fill: "#F3F4F6" }}
+              />
+              <Bar dataKey="Gefactureerd excl. BTW" fill="rgba(0,107,72,0.2)" stroke={dash.green} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+        <ChartCard title="EVENTO aanvragen per maand" sub="Nieuw · In optie · Bevestigd · Geannuleerd" height={200}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartAanvragen}>
+              <CartesianGrid vertical={false} stroke="#F3F4F6" />
+              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
+              <Tooltip cursor={{ fill: "#F3F4F6" }} />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              <Bar dataKey="Nieuw" fill="#93C5FD" radius={[3, 3, 0, 0]} maxBarSize={16} />
+              <Bar dataKey="In optie" fill="#FCD34D" radius={[3, 3, 0, 0]} maxBarSize={16} />
+              <Bar dataKey="Bevestigd" fill={dash.emerald} radius={[3, 3, 0, 0]} maxBarSize={16} />
+              <Bar dataKey="Geannuleerd" fill={dash.red} radius={[3, 3, 0, 0]} maxBarSize={16} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
       <Card>
-        <h2 className="mb-1 font-medium text-slate-800">Gefactureerd per factuurdatum</h2>
+        <h2 className="mb-1 font-medium text-slate-800">Gefactureerde omzet per factuurdatum — aansluiting AFAS</h2>
         <p className="mb-4 text-sm text-slate-500">Excl. btw &middot; op factuurdatum -- aansluiting AFAS</p>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
@@ -53,7 +116,7 @@ export function MaandoverlegTab({
             <tbody>
               {rows.map((row) => (
                 <tr key={row.month} className="border-b border-slate-100">
-                  <td className="p-2 font-semibold">{formatMonthLabel(row.month)}</td>
+                  <td className="p-2 font-semibold">{formatMonthLabelLong(row.month)}</td>
                   <td className="p-2 text-right font-bold text-emerald-700">{formatEuro(row.invoicedExclVat)}</td>
                   <td className="p-2 text-right">{formatEuro(row.cumulative)}</td>
                 </tr>
@@ -79,6 +142,57 @@ export function MaandoverlegTab({
         </div>
       </Card>
 
+      <Callout tone="warn">
+        M&amp;R Kampen en M&amp;R Utrecht worden pas getoond zodra hier handmatig cijfers voor zijn ingevuld.
+      </Callout>
+
+      {monthsWithEntries.length > 0 && (
+        <div className="flex flex-col gap-4">
+          {monthsWithEntries.map((month) => {
+            const entries = entriesByMonth.get(month) ?? [];
+            return (
+              <div key={month}>
+                <div className="mb-1.5 text-xs font-bold" style={{ color: "#374151" }}>
+                  {formatMonthLabel(month)}
+                </div>
+                <div className="overflow-x-auto rounded-lg border" style={{ borderColor: dash.border }}>
+                  <table className="w-full min-w-[480px] border-collapse text-[12px]">
+                    <thead>
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold" style={{ background: dash.blue, color: "#fff" }}>
+                          Indicator
+                        </th>
+                        {LOCATIONS.map((loc) => (
+                          <th key={loc} className="px-3 py-2 text-right text-[11px] font-semibold" style={{ background: dash.blue, color: "#fff" }}>
+                            {loc}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {INDICATOR_ROWS.map((row) => (
+                        <tr key={row.key} className="border-t" style={{ borderColor: "#F3F4F6" }}>
+                          <td className={`px-3 py-1.5 ${row.indent ? "pl-6 text-slate-500" : "font-semibold"}`}>{row.label}</td>
+                          {LOCATIONS.map((loc) => {
+                            const entry = entries.find((e) => e.location === loc);
+                            const value = entry?.[row.key];
+                            return (
+                              <td key={loc} className="px-3 py-1.5 text-right">
+                                {value == null ? <span style={{ color: dash.mutedLight }}>-</span> : row.isEuro ? formatEuro(Number(value)) : String(value)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <Card>
         <h2 className="mb-1 font-medium text-slate-800">Handmatige maandcijfers per locatie</h2>
         <p className="mb-4 text-sm text-slate-500">
@@ -87,41 +201,6 @@ export function MaandoverlegTab({
         </p>
         <ManualEntryForm months={months} />
       </Card>
-
-      {manualEntries.length > 0 && (
-        <Card className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-100 text-left text-xs text-slate-600">
-                  <th className="p-2">Maand</th>
-                  <th className="p-2">Locatie</th>
-                  <th className="p-2 text-right">Omzet</th>
-                  <th className="p-2 text-right">Nieuw</th>
-                  <th className="p-2 text-right">Optie</th>
-                  <th className="p-2 text-right">Bevestigd</th>
-                  <th className="p-2 text-right">Geannuleerd</th>
-                  <th className="p-2">Notitie</th>
-                </tr>
-              </thead>
-              <tbody>
-                {manualEntries.map((entry) => (
-                  <tr key={entry.id} className="border-b border-slate-100">
-                    <td className="p-2 font-semibold">{formatMonthLabel(entry.month)}</td>
-                    <td className="p-2">{entry.location}</td>
-                    <td className="p-2 text-right">{entry.revenueTotal != null ? formatEuro(entry.revenueTotal) : "-"}</td>
-                    <td className="p-2 text-right">{entry.newRequests ?? "-"}</td>
-                    <td className="p-2 text-right">{entry.inOption ?? "-"}</td>
-                    <td className="p-2 text-right">{entry.confirmed ?? "-"}</td>
-                    <td className="p-2 text-right">{entry.cancelled ?? "-"}</td>
-                    <td className="max-w-[200px] truncate p-2 text-xs text-slate-500">{entry.note ?? ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
     </div>
   );
 }

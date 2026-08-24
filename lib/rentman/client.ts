@@ -118,8 +118,15 @@ export type RentmanFinancialSubproject = {
   project?: { number?: number | string } | null;
   status?: { name?: string } | null;
   planperiod_start?: string | null;
+  planperiod_end?: string | null;
   created?: string | null;
   project_total_price?: number | string | null;
+  // Voor geannuleerde subprojecten zet Rentman `project_total_price` op 0 --
+  // dit gegenereerde veld behoudt het offertebedrag van vóór de annulering
+  // en is dus de juiste bron voor "gederfde omzet" (bevestigd via live data:
+  // een geannuleerd subproject had project_total_price=0 maar
+  // project_total_price_cancelled=356.615).
+  project_total_price_cancelled?: number | string | null;
   already_invoiced?: number | string | null;
 };
 
@@ -138,7 +145,8 @@ export type RentmanFinancialSubproject = {
 export async function fetchAllSubprojectsFinancial(year: number) {
   return rentmanFetchAll<RentmanFinancialSubproject>("subprojects", {
     expand: "project,status",
-    fields: "id,name,project,status,planperiod_start,created,project_total_price,already_invoiced",
+    fields:
+      "id,name,project,status,planperiod_start,planperiod_end,created,project_total_price,project_total_price_cancelled,already_invoiced",
     "created[gte]": `${year}-01-01T00:00:00+00:00`,
     "created[lt]": `${year + 1}-01-01T00:00:00+00:00`,
   });

@@ -105,7 +105,8 @@ components/
   timer-widget.tsx  hours-entry.tsx  time-entry-form.tsx
   ship-occupancy-form.tsx  meal-count-form.tsx  food-waste-form.tsx
   admin/                      # Beheer-specifieke componenten (forms, project-list, reports/*,
-                               # rentman-dashboard/* — de 5 tabs van het financiële dashboard)
+                               # rentman-dashboard/* — de 6 tabs van het financiële dashboard +
+                               # colors.ts/kpi-card.tsx als gedeelde, pixel-exacte bouwstenen)
 
 lib/
   session.ts  dal.ts          # Sessiebeheer (jose/JWT) + Data Access Layer (requireAdmin, getUser)
@@ -118,7 +119,8 @@ lib/
   actions/                    # "use server" — alle mutaties, per domein
   afas/                       # AFAS Profit REST-koppeling (client + hoursSync)
   rentman/                    # Rentman REST-koppeling: client.ts + sync.ts (projectimport) +
-                               # dashboardSync.ts (financieel dashboard, zie §10.5)
+                               # dashboardSync.ts + dashboardAggregate.ts (financieel dashboard,
+                               # zie §10.5)
   shiftbase/                  # Shiftbase-koppeling: client.ts (verkenner) + sync.ts
                                # (vaarbemanning-import, lezend, werkend) + hoursSync.ts
                                # (urenexport, schrijvend, nog geblokkeerd/ongeverifieerd)
@@ -167,12 +169,15 @@ Volledige bron: [`prisma/schema.prisma`](prisma/schema.prisma). Kernpunten per m
   `lib/day-submission.ts`, aangeroepen aan het begin van elke create-server-action).
 - **`SyncState`** — generieke key/value-tabel; nu gebruikt voor het laatste Rentman
   `modified`-watermark (incrementele sync).
-- **`RentmanMonthlySnapshot`** / **`RentmanInvoicedMonthly`** / **`RentmanPendingProject`** /
-  **`RentmanManualMonthlyEntry`** — vooraf-berekende data voor het financiële Rentman-dashboard
-  (§10.5). De eerste drie zijn puur afgeleid uit Rentman en worden elke run **volledig
-  herberekend** (upsert + opschoning van rijen buiten de huidige jaarscope — geen incrementele
-  sync); de laatste (`RentmanManualMonthlyEntry`) is de enige met écht handmatig ingevoerde data
-  (uniek per `(month, location)`), bedoeld voor het Maandoverleg-scherm.
+- **`RentmanSubprojectSnapshot`** — de ruwe brontabel voor het financiële Rentman-dashboard
+  (§10.5): één rij per Rentman-subproject, jaargescoped, elke run **volledig herberekend**
+  (upsert + opschoning van rijen buiten de huidige jaarscope — geen incrementele sync). Alle
+  KPI's/grafieken/tabellen van de 6 tabbladen worden hier bij paginaopbouw uit afgeleid
+  (`lib/rentman/dashboardAggregate.ts`) i.p.v. los vooraf-geaggregeerd te worden.
+- **`RentmanInvoicedMonthly`** — apart van `RentmanSubprojectSnapshot` omdat dit op
+  **factuurdatum** groepeert i.p.v. aanmaakdatum (voor het Maandoverleg-scherm/AFAS-aansluiting).
+- **`RentmanManualMonthlyEntry`** — de enige met écht handmatig ingevoerde data (uniek per
+  `(month, location)`), bedoeld voor het Maandoverleg-scherm.
 
 **Indexen:** naast de voor de hand liggende unieke constraints staan er `@@index`'en op
 `TimeEntry(userId, date)`, `TimeEntry(afasSyncStatus)`, `TimeEntry(shiftbaseSyncStatus)` en op
@@ -434,39 +439,74 @@ hierboven), en zodra AFAS een betaling registreert, die betaalstatus terugzetten
 
 ### 10.5 Rentman financieel dashboard (`/admin/rentman-financieel`) — **werkend**
 
-Herbouw van een door de klant zelf gemaakt statisch HTML-dashboard (aangeleverd als voorbeeld)
-als een echt, elke nacht ververst onderdeel van de app. Alleen lezend richting Rentman, net als
-§10.2 — dit voegt geen nieuwe schrijfrichting toe.
+Pixel-voor-pixel herbouw van een door de klant zelf gemaakt statisch HTML-dashboard
+(`rentman_dashboard_v4.html`, Chart.js, aangeleverd als referentie) als een echt, elke nacht
+ververst onderdeel van de app — inclusief volledige paginabreedte (zie onder). Alleen lezend
+richting Rentman, net als §10.2 — dit voegt geen nieuwe schrijfrichting toe.
 
-- Module: `lib/rentman/dashboardSync.ts` (`syncRentmanDashboard()`), gebruikt twee nieuwe
-  fetch-functies in `lib/rentman/client.ts`: `fetchAllSubprojectsFinancial(year)` en
-  `fetchAllInvoicesForDashboard(year)`.
-- **Jaarscope (belangrijk, live ontdekte bug — 24 aug 2026 opgelost):** beide fetch-functies
-  filteren op `year` (`created[gte]`/`created[lt]` resp. `date[gte]`/`date[lt]`, top-level
-  queryparams — zelfde patroon als `modified[gte]` in §10.2). **Zonder** deze filter haalt
-  Rentman de **volledige historie** op (destijds 1446 subprojecten sinds juli 2023 i.p.v. de
-  verwachte ~800 voor het lopende jaar), wat de KPI's opblies en tot onzinnige
-  facturatiepercentages (tot 400%) leidde door prijscorrecties op allang afgesloten oude
-  projecten. `syncRentmanDashboard()` geeft `new Date().getUTCFullYear()` door aan beide
-  functies. **Bijbehorende opschoning:** omdat elke run de volledige jaarscope opnieuw berekent
-  (geen incrementele sync), worden `RentmanMonthlySnapshot`- en `RentmanInvoicedMonthly`-rijen
-  voor maanden **buiten** de verse resultaatset expliciet verwijderd na elke sync (`deleteMany`
-  met `notIn`, alleen als de fetch daadwerkelijk resultaten opleverde) — anders blijven oude
-  maanden (bv. uit vóór deze jaarfilter bestond) voor altijd in de grafieken staan. Zelfde
-  veiligheidspatroon als de bestaande opschoning van `RentmanPendingProject`.
+**Architectuur:** één ruwe brontabel, geen vooraf-geaggregeerde tussentabellen. `RentmanSubprojectSnapshot`
+bevat één rij per Rentman-subproject (jaargescoped, elke nacht volledig ververst — rijen buiten
+scope worden verwijderd). Alle KPI's/grafieken/tabellen van de 6 tabbladen worden hieruit
+*bij het opbouwen van de pagina* afgeleid via pure functies in `lib/rentman/dashboardAggregate.ts`
+(`overviewKpis`, `monthlySeries`, `statusByMonth`, `openByStatus`, `monthDetail`, `cancelledKpis`,
+`cancelledByMonth`/`cancelledInMonth`, `pendingKpis`/`pendingList`, `followUpKpis`/`followUpList`)
+— bij ~800 rijen is dat in-memory triviaal snel, en het voorkomt dat elke nieuwe doorsnede een
+eigen precomputed tabel nodig heeft (eerdere opzet met `RentmanMonthlySnapshot`+`RentmanPendingProject`
+is hierom vervangen, migratie `20260824065117_rentman_subproject_snapshot`). `RentmanInvoicedMonthly`
+(factuurdatum-groepering, voor Maandoverleg) en `RentmanManualMonthlyEntry` (handmatige cijfers)
+blijven wel losse tabellen.
+
+- Module: `lib/rentman/dashboardSync.ts` (`syncRentmanDashboard()`), gebruikt twee fetch-functies
+  in `lib/rentman/client.ts`: `fetchAllSubprojectsFinancial(year)` en `fetchAllInvoicesForDashboard(year)`.
+- **Jaarscope (live ontdekte bug — 24 aug 2026 opgelost):** beide fetch-functies filteren op
+  `year` (`created[gte]`/`created[lt]` resp. `date[gte]`/`date[lt]`, top-level queryparams —
+  zelfde patroon als `modified[gte]` in §10.2). **Zonder** deze filter haalt Rentman de
+  **volledige historie** op (destijds 1446 subprojecten sinds juli 2023 i.p.v. de verwachte ~800
+  voor het lopende jaar), wat de KPI's opblies en tot onzinnige facturatiepercentages (tot 400%)
+  leidde door prijscorrecties op allang afgesloten oude projecten. `syncRentmanDashboard()` geeft
+  `new Date().getUTCFullYear()` door aan beide functies, en ruimt na elke sync rijen buiten de
+  verse jaarscope expliciet op (`deleteMany` met `notIn`, alleen als de fetch daadwerkelijk
+  resultaten opleverde).
 - **`number` zit op het Project, niet op het Subproject** (zelfde valkuil als §10.2) — daarom
   `expand: "project,status"` en toegang via `sp.project?.number`.
-- **Statusregel Opvolging-tab (afgesproken met de klant):** alleen subprojecten met status
-  `Optie` of `Aanvraag` tellen mee — bewust **geen** extra datum-/urgentielogica. De
-  oorspronkelijke mockup had losse "In optie" en "Aanvraag"-tabbladen; die zijn hier
-  samengevoegd tot één "Opvolging (optie & aanvraag)"-tab, gesorteerd op omzet.
-- **Maandoverleg-tab:** toont de Rentman-cijfers (gefactureerd per factuurdatum, cumulatief) én
-  een handmatig invoerscherm per `(maand, locatie)` — deze reconciliatiecijfers (bezorgen vs.
-  afhalen, nieuwe aanvragen/optie/bevestigd/geannuleerd-tellingen) komen niet (volledig) uit
-  Rentman en worden bewust apart opgeslagen in `RentmanManualMonthlyEntry`, niet berekend.
-- **Detailniveau bewust beperkt tot maandtotalen** (afgesproken met de klant) — geen
-  per-project financiële regels in het dashboard zelf; wie dat wil kan naar `/admin/rentman`
-  (§10.2) of Rentman zelf.
+- **"Gederfde omzet" voor geannuleerde projecten (live ontdekte bug — 24 aug 2026 opgelost):**
+  Rentman zet `project_total_price` op **0** zodra een subproject geannuleerd wordt. De eerste
+  opzet gebruikte dat veld overal, waardoor "Gederfde omzet" altijd €0 toonde. Rentman heeft
+  echter een apart gegenereerd veld, **`project_total_price_cancelled`**, dat het offertebedrag
+  van vóór de annulering behoudt (bevestigd via de Rentman MCP-connector op live data: een
+  geannuleerd subproject had `project_total_price=0` maar `project_total_price_cancelled=131694`).
+  `RentmanSubprojectSnapshot.cancelledRevenue` bewaart dit apart van `revenue`, zodat gederfde
+  omzet nooit meetelt in de actieve omzettotalen. Verwacht dat dit KPI-getal van dag tot dag
+  merkbaar springt (elke nieuwe annulering met een groot offertebedrag telt direct mee) — dat is
+  correct/gewenst gedrag voor een "live" dashboard, geen bug.
+- **6 tabbladen, exact als het referentiedashboard** (de eerste versie voegde "Opvolging" en
+  "In optie & aanvraag" ten onrechte samen tot 1 tab — dat zijn twee verschillende dingen):
+  1. **Omzet & Facturatie** — 5 KPI's, 4 grafieken (omzet vs. gefactureerd, facturatiegraad,
+     omzet per status per maand gestapeld, open omzet per status als donut).
+  2. **Projecten per maand** — maandkiezer; per maand 2 KPI's, een statuslijst met
+     voortgangsbalken, een donut, en per status een kleurkoptabel met individuele projecten
+     (#, Project, Periode, Omzet, Gefact., Open, %).
+  3. **Geannuleerd** — 4 KPI's (incl. gederfde omzet, grootste annulering), 2 grafieken,
+     maandkiezer met tabel van geannuleerde projecten gesorteerd op offertebedrag.
+  4. **Maandoverleg** — 2 grafieken (gefactureerd per factuurdatum; EVENTO-aanvragen per maand
+     uit de handmatige cijfers), de bestaande factuurdatum-tabel, per-maand pivot-tabellen
+     (indicator × locatie, opgebouwd uit `RentmanManualMonthlyEntry`) en het handmatige
+     invoerscherm.
+  5. **Opvolging** — niet-gefactureerde projecten per maand, best-effort geclassificeerd als
+     ⚠ Aandacht (periode al voorbij) of 📅 Toekomstig (periode nog in de toekomst). **Let op:**
+     de "Doorlopend"-categorie (contracten) en de creditnota-uitsluiting uit het
+     referentiedashboard waren daar een eenmalige, handmatig gecureerde analyse — met de huidige
+     Rentman-velden niet betrouwbaar automatisch af te leiden, en daarom bewust weggelaten i.p.v.
+     gefabriceerd. Zie `followUpList()` in `dashboardAggregate.ts` voor de exacte regels.
+  6. **In optie & aanvraag** — alle projecten met status Optie/Aanvraag, oudste aanmaakdatum
+     eerst, rood gemarkeerd wanneer de periode al verlopen is.
+- **Kleuren exact overgenomen** uit het referentiedashboard in `components/admin/rentman-dashboard/colors.ts`
+  (bewust een aparte, pixel-exacte tokenset — niet de generieke `components/admin/reports/palette.ts`).
+  Grafieken met Recharts (het gevestigde patroon in deze app), niet Chart.js zoals het origineel.
+- **Volledige paginabreedte:** `app/admin/layout.tsx` beperkt alle admin-pagina's tot `max-w-2xl`.
+  Dit scherm breekt daar bewust uit via een CSS "full-bleed"-truc
+  (`relative left-1/2 w-screen -translate-x-1/2`, gevolgd door een eigen `max-w-[1700px]`) i.p.v.
+  de gedeelde layout aan te passen — geen ander admin-scherm is geraakt.
 - Trigger: "Nu herberekenen" op `/admin/rentman-financieel`, of automatisch 's nachts —
   piggybackt op de bestaande Rentman-cron (`app/api/rentman/sync/route.ts` roept na
   `syncRentmanProjects()` ook `syncRentmanDashboard()` aan, onafhankelijk try/catch zodat een
@@ -656,12 +696,11 @@ Gesorteerd op vermoedelijke prioriteit voor de klant:
    maar goed om te weten voor wie hier niet bij was).
 8. **Rapportagepagina's en admin-schermen zijn Nederlandstalig** — vertaling is nooit
    meegenomen (bewuste keuze, niet vergeten of kapot).
-9. **Financieel dashboard: samenvoeging "In optie"/"Aanvraag" tot één Opvolging-tab** — de
-   oorspronkelijke door de klant aangeleverde mockup had deze als twee losse tabbladen; hier
-   samengevoegd tot één (zie §10.5). Dit is een eigen ontwerpkeuze tijdens de bouw, niet
-   letterlijk expliciet zo gevraagd — de klant heeft wel bevestigd dát Optie/Aanvraag samen de
-   inclusieregel zijn, maar de tab-samenvoeging zelf is nooit apart voorgelegd. Goed om nog
-   eens te checken bij de klant of dit zo gewenst blijft.
+9. **Financieel dashboard, Opvolging-tab is best-effort** — de "Aandacht"/"Toekomstig"-vlaggen
+   zijn een redelijke benadering (periode verlopen resp. in de toekomst), maar de
+   "Doorlopend"-categorie (contracten) en de creditnota-uitsluiting uit het referentiedashboard
+   waren daar een eenmalige handmatige analyse die niet uit de huidige Rentman-velden is af te
+   leiden. Zie §10.5 voor de exacte regels en de reden waarom dit bewust niet nagebouwd is.
 
 ---
 

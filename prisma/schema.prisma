@@ -256,27 +256,43 @@ model DaySubmission {
 // specifiek voor deze rapportage. Zie lib/rentman/dashboardSync.ts.
 // ---------------------------------------------------------------------------
 
-/// Eén rij per (aanmaak)maand -- vooraf berekende omzet-/facturatiecijfers,
-/// zodat het dashboard direct laadt i.p.v. bij elke paginaweergave opnieuw
-/// honderden Rentman-subprojecten te moeten doorrekenen.
-model RentmanMonthlySnapshot {
-  id                String   @id @default(cuid())
-  /// "2026-01" .. "2026-12"
-  month             String   @unique
-  projectCount      Int
-  totalRevenue      Decimal  @db.Decimal(12, 2)
-  totalInvoiced     Decimal  @db.Decimal(12, 2)
-  /// Per status: { [statusnaam]: { count, revenue, invoiced } }
-  statusBreakdown   Json
-  cancelledCount    Int
-  cancelledRevenue  Decimal  @db.Decimal(12, 2)
-  topCancelledName   String?
-  topCancelledNumber String?
-  topCancelledAmount Decimal? @db.Decimal(12, 2)
-  computedAt        DateTime @updatedAt
+/// Eén rij per Rentman-subproject (jaargescoped, elke nacht volledig ververst
+/// -- rijen buiten de scope worden verwijderd). Dit is de ruwe brondata voor
+/// alle 6 tabs van het financiële dashboard; alle KPI's/grafieken/tabellen
+/// worden er bij het opbouwen van de pagina uit afgeleid (zie
+/// lib/rentman/dashboardAggregate.ts) i.p.v. vooraf apart geaggregeerd te
+/// worden -- bij ~800 rijen is dat in-memory triviaal snel, en het voorkomt
+/// dat elke nieuwe doorsnede een eigen vooraf-berekende tabel nodig heeft.
+model RentmanSubprojectSnapshot {
+  id                   String    @id @default(cuid())
+  rentmanSubprojectId  String    @unique
+  name                 String
+  rentmanProjectNumber String?
+  status               String
+  /// Projectomzet excl. btw (Rentmans `project_total_price`) -- 0 zodra het
+  /// subproject geannuleerd is. Telt mee in "Totale projectomzet".
+  revenue              Decimal   @db.Decimal(12, 2)
+  /// Alleen gevuld bij status "Geannuleerd": het offertebedrag van vóór de
+  /// annulering (Rentmans `project_total_price_cancelled`, dat -- in
+  /// tegenstelling tot `project_total_price` -- niet op 0 gezet wordt).
+  /// Bewust een apart veld i.p.v. hergebruik van `revenue`, zodat
+  /// "gederfde omzet" nooit per ongeluk meetelt in de actieve omzettotalen.
+  cancelledRevenue     Decimal?  @db.Decimal(12, 2)
+  invoiced             Decimal   @db.Decimal(12, 2)
+  /// Aanmaakmaand, "2026-01" .. "2026-12" -- de groepering die de meeste
+  /// tabbladen gebruiken (uitzondering: Maandoverleg groepeert op
+  /// factuurdatum, zie RentmanInvoicedMonthly).
+  month                String
+  createdAt            DateTime
+  planperiodStart      DateTime?
+  planperiodEnd        DateTime?
+  computedAt           DateTime  @updatedAt
+
+  @@index([month])
+  @@index([status])
 }
 
-/// Eén rij per (factuur)maand -- apart van RentmanMonthlySnapshot omdat dit
+/// Eén rij per (factuur)maand -- apart van RentmanSubprojectSnapshot omdat dit
 /// op factuurdatum groepeert i.p.v. project-aanmaakdatum (voor aansluiting
 /// met AFAS/boekhouding, zie het "Maandoverleg"-scherm).
 model RentmanInvoicedMonthly {
@@ -284,23 +300,6 @@ model RentmanInvoicedMonthly {
   month         String   @unique
   invoicedExclVat Decimal @db.Decimal(12, 2)
   computedAt    DateTime @updatedAt
-}
-
-/// Projecten met status "Optie" of "Aanvraag" -- ververst elke nacht volledig
-/// (oude rijen die niet meer voorkomen worden verwijderd). Los van de
-/// operationele Project-tabel omdat die alleen actief-kiesbare projecten
-/// bijhoudt (zie eerdere opschoning) en dus geen betrouwbare bron is voor
-/// "welke aanvragen/opties staan er nu open".
-model RentmanPendingProject {
-  id                   String    @id @default(cuid())
-  rentmanSubprojectId  String    @unique
-  name                 String
-  rentmanProjectNumber String?
-  status               String
-  revenue              Decimal   @db.Decimal(12, 2)
-  planperiodStart      DateTime?
-  month                String
-  computedAt           DateTime  @updatedAt
 }
 
 /// Handmatig ingevulde maandcijfers per locatie (bv. "M&R Kampen"), ter

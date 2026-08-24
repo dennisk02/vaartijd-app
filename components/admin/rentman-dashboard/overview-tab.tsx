@@ -1,121 +1,118 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, Legend, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Card } from "@/components/ui";
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartTooltip } from "@/components/admin/reports/chart-tooltip";
-import { chartColors } from "@/components/admin/reports/palette";
+import { dash, statusColor } from "./colors";
+import { KpiCard, KpiGrid, Callout, ChartCard } from "./kpi-card";
 import { formatEuro, formatMonthLabel } from "./format";
+import type { Subproject } from "@/lib/rentman/dashboardAggregate";
+import { monthlySeries, openByStatus, overviewKpis, statusByMonth } from "@/lib/rentman/dashboardAggregate";
 
-export type MonthPoint = {
-  month: string;
-  projectCount: number;
-  totalRevenue: number;
-  totalInvoiced: number;
-};
+export function OverviewTab({ subs }: { subs: Subproject[] }) {
+  const kpi = overviewKpis(subs);
+  const months = monthlySeries(subs);
+  const stacked = statusByMonth(subs);
+  const open = openByStatus(subs);
 
-export function OverviewTab({
-  points,
-  pendingRevenue,
-  cancelledRevenue,
-  cancelledCount,
-}: {
-  points: MonthPoint[];
-  pendingRevenue: number;
-  cancelledRevenue: number;
-  cancelledCount: number;
-}) {
-  const totalProjects = points.reduce((sum, p) => sum + p.projectCount, 0);
-  const totalRevenue = points.reduce((sum, p) => sum + p.totalRevenue, 0);
-  const totalInvoiced = points.reduce((sum, p) => sum + p.totalInvoiced, 0);
-  const invoicedPct = totalRevenue > 0 ? Math.round((totalInvoiced / totalRevenue) * 100) : 0;
-
-  const chartData = points.map((p) => ({
-    month: formatMonthLabel(p.month),
-    Omzet: Math.round(p.totalRevenue),
-    Gefactureerd: Math.round(p.totalInvoiced),
-    pct: p.totalRevenue > 0 ? Math.round((p.totalInvoiced / p.totalRevenue) * 100) : 0,
-  }));
+  const revenueChartData = months.map((m) => ({ month: formatMonthLabel(m.month), Projectomzet: m.omzet, Gefactureerd: m.gefact }));
+  const rateChartData = months.map((m) => ({ month: formatMonthLabel(m.month), pct: m.pct }));
+  const stackedChartData = stacked.months.map((month, i) => {
+    const row: Record<string, string | number> = { month: formatMonthLabel(month) };
+    for (const s of stacked.series) row[s.status] = s.data[i];
+    return row;
+  });
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Kpi label="Projecten" value={String(totalProjects)} />
-        <Kpi label="Totale projectomzet" value={formatEuro(totalRevenue)} />
-        <Kpi label="Al gefactureerd" value={formatEuro(totalInvoiced)} sub={`${invoicedPct}%`} accent="emerald" />
-        <Kpi label="Omzet in optie/aanvraag" value={formatEuro(pendingRevenue)} accent="blue" />
-        <Kpi label="Gederfde omzet" value={formatEuro(cancelledRevenue)} sub={`${cancelledCount} geannuleerd`} accent="red" />
-      </div>
+    <div className="flex flex-col gap-3.5">
+      <KpiGrid>
+        <KpiCard label="Projecten" value={String(kpi.totalProjects)} accent={dash.blue} sub={`${months.length} maanden`} />
+        <KpiCard label="Totale projectomzet" value={formatEuro(kpi.totalRevenue)} accent={dash.green} sub="Excl. BTW" />
+        <KpiCard label="Al gefactureerd" value={formatEuro(kpi.totalInvoiced)} accent={dash.green} sub={`${kpi.invoicedPct}% · excl. BTW`} />
+        <KpiCard label="Omzet in optie" value={formatEuro(kpi.optieRevenue)} accent="#3B82F6" valueColor="#3B82F6" sub="Nog te bevestigen" />
+        <KpiCard label="Gederfde omzet" value={formatEuro(kpi.cancelledRevenue)} accent={dash.red} valueColor={dash.red} sub={`${kpi.cancelledCount} geannuleerd`} />
+      </KpiGrid>
 
-      <Card>
-        <h2 className="mb-1 font-medium text-slate-800">Projectomzet vs. gefactureerd per maand</h2>
-        <p className="mb-4 text-sm text-slate-500">Op aanmaakmaand van het subproject &middot; excl. btw</p>
-        <div className="h-72 w-full">
+      <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-[2fr_1fr]">
+        <ChartCard title="Projectomzet vs. gefactureerd" sub="Per aanmaakmaand · Excl. BTW">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData}>
-              <CartesianGrid vertical={false} stroke={chartColors.gridline} />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: chartColors.mutedInk }} axisLine={{ stroke: chartColors.baseline }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: chartColors.mutedInk }} axisLine={false} tickLine={false} width={64} tickFormatter={(v) => formatEuro(v)} />
+            <BarChart data={revenueChartData}>
+              <CartesianGrid vertical={false} stroke="#F3F4F6" />
+              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
               <Tooltip
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => formatEuro(v)} />}
-                cursor={{ fill: chartColors.gridline, opacity: 0.4 }}
+                cursor={{ fill: "#F3F4F6" }}
               />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="Omzet" fill={chartColors.blue} radius={[4, 4, 0, 0]} maxBarSize={28} />
-              <Bar dataKey="Gefactureerd" fill={chartColors.aqua} radius={[4, 4, 0, 0]} maxBarSize={28} />
-            </ComposedChart>
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="Projectomzet" fill="rgba(30,64,175,0.15)" stroke={dash.blue} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              <Bar dataKey="Gefactureerd" fill="rgba(0,107,72,0.15)" stroke={dash.green} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
+            </BarChart>
           </ResponsiveContainer>
-        </div>
-      </Card>
+        </ChartCard>
 
-      <Card>
-        <h2 className="mb-1 font-medium text-slate-800">Facturatiegraad per maand</h2>
-        <p className="mb-4 text-sm text-slate-500">% van de projectomzet die al gefactureerd is</p>
-        <div className="h-56 w-full">
+        <ChartCard title="Facturatiegraad" sub="% gefactureerd per maand">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData}>
-              <CartesianGrid vertical={false} stroke={chartColors.gridline} />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: chartColors.mutedInk }} axisLine={{ stroke: chartColors.baseline }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: chartColors.mutedInk }} axisLine={false} tickLine={false} width={40} tickFormatter={(v) => `${v}%`} />
+            <BarChart data={rateChartData}>
+              <CartesianGrid vertical={false} stroke="#F3F4F6" />
+              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={34} tickFormatter={(v) => `${v}%`} />
               <Tooltip
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => `${v}%`} />}
-                cursor={{ fill: chartColors.gridline, opacity: 0.4 }}
+                cursor={{ fill: "#F3F4F6" }}
               />
-              <Bar dataKey="pct" name="Facturatiegraad" fill={chartColors.blue} radius={[4, 4, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="pct" name="Facturatiegraad" radius={[6, 6, 0, 0]} maxBarSize={26}>
+                {rateChartData.map((d, i) => (
+                  <Cell key={i} fill={d.pct >= 70 ? dash.green : d.pct >= 50 ? dash.amber : dash.redDark} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      </Card>
-    </div>
-  );
-}
+        </ChartCard>
+      </div>
 
-function Kpi({
-  label,
-  value,
-  sub,
-  accent,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  accent?: "emerald" | "blue" | "red";
-}) {
-  const accentClass =
-    accent === "emerald"
-      ? "border-emerald-500"
-      : accent === "blue"
-        ? "border-blue-500"
-        : accent === "red"
-          ? "border-red-500"
-          : "border-slate-300";
-  const valueClass = accent === "blue" ? "text-blue-600" : accent === "red" ? "text-red-600" : "text-slate-900";
-  return (
-    <div className={`rounded-xl border-t-4 bg-white p-3 shadow-sm ${accentClass}`}>
-      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`text-lg font-extrabold ${valueClass}`}>{value}</div>
-      {sub && <div className="text-xs text-slate-400">{sub}</div>}
+      <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
+        <ChartCard title="Omzet per status per maand" sub="Gestapeld · Excl. BTW">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={stackedChartData}>
+              <CartesianGrid vertical={false} stroke="#F3F4F6" />
+              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
+              <Tooltip
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => formatEuro(v)} />}
+                cursor={{ fill: "#F3F4F6" }}
+              />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              {stacked.series.map((s) => (
+                <Bar key={s.status} dataKey={s.status} stackId="a" fill={statusColor(s.status)} radius={[2, 2, 0, 0]} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Open omzet per status" sub="Niet-gefactureerd · Alle maanden">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={open} dataKey="value" nameKey="status" innerRadius={45} outerRadius={78} paddingAngle={1}>
+                {open.map((s) => (
+                  <Cell key={s.status} fill={statusColor(s.status)} stroke="#fff" strokeWidth={2} />
+                ))}
+              </Pie>
+              <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 10 }} />
+              <Tooltip
+                formatter={(value, name) => [formatEuro(Number(value ?? 0)), String(name)]}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      <Callout tone="warn">
+        <b>Let op — aanmaakdatum vs. factuurdatum:</b> dit tabblad groepeert op aanmaakmaand van het project. Gebruik{" "}
+        <b>Maandoverleg</b> voor factuurdatum-cijfers ter aansluiting op AFAS.
+      </Callout>
     </div>
   );
 }

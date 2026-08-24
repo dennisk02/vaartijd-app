@@ -1,63 +1,96 @@
-import { Card } from "@/components/ui";
-import { formatEuro } from "./format";
+import { dash } from "./colors";
+import { KpiCard, KpiGrid, Callout } from "./kpi-card";
+import { formatDate, formatEuro } from "./format";
+import type { Subproject } from "@/lib/rentman/dashboardAggregate";
+import { pendingKpis, pendingList } from "@/lib/rentman/dashboardAggregate";
 
-export function PendingTab({
-  projects,
-}: {
-  projects: {
-    id: string;
-    name: string;
-    rentmanProjectNumber: string | null;
-    status: string;
-    revenue: number;
-    planperiodStart: Date | null;
-  }[];
-}) {
-  const totalRevenue = projects.reduce((sum, p) => sum + p.revenue, 0);
-  const sorted = [...projects].sort((a, b) => b.revenue - a.revenue);
+/** Tabblad "In optie & aanvraag" -- alle projecten met status Optie/Aanvraag,
+ * oudste eerst. Niet te verwarren met "Opvolging" (follow-up-tab.tsx), dat
+ * over niet-gefactureerde bevestigde projecten gaat. */
+export function PendingTab({ subs }: { subs: Subproject[] }) {
+  const kpi = pendingKpis(subs);
+  const list = pendingList(subs);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border-t-4 border-blue-500 bg-white p-3 shadow-sm">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Optie &amp; aanvraag</div>
-          <div className="text-lg font-extrabold text-blue-600">{projects.length} proj.</div>
+    <div className="flex flex-col gap-3.5">
+      <KpiGrid>
+        <KpiCard label="In optie" value={String(kpi.optieCount)} accent="#3B82F6" valueColor="#3B82F6" sub={`${formatEuro(kpi.optieRevenue)} projectomzet`} />
+        <KpiCard label="Aanvraag" value={String(kpi.aanvraagCount)} accent="#F59E0B" valueColor={dash.amber} sub={`${formatEuro(kpi.aanvraagRevenue)} projectomzet`} />
+        <KpiCard label="Totale omzet" value={formatEuro(kpi.totalRevenue)} accent={dash.blue} sub="Excl. BTW · Nog te bevestigen" />
+        <KpiCard
+          label="Oudste open"
+          value={kpi.oldest?.projectNumber ?? "-"}
+          accent={dash.gray}
+          sub={kpi.oldest ? `${kpi.oldest.name} — ${formatDate(kpi.oldest.createdAt)}` : undefined}
+        />
+      </KpiGrid>
+
+      <Callout tone="info">
+        <b>Wat zie je hier:</b> alle projecten met status <b>In optie</b> of <b>Aanvraag</b>, gesorteerd op aanmaakdatum (oudste
+        bovenaan). Rood gemarkeerde periodes zijn al verlopen — deze projecten verdienen extra aandacht. Omzet is de totale
+        projectomzet excl. BTW.
+      </Callout>
+
+      <div className="rounded-[10px] bg-white p-4" style={{ boxShadow: "0 1px 4px rgba(0,0,0,.08)" }}>
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.heading }}>
+              In optie &amp; aanvragen — oudste eerst
+            </h2>
+            <p className="text-[11px]" style={{ color: dash.mutedLight }}>
+              Rode periode = verlopen · {list.length} projecten totaal
+            </p>
+          </div>
+          <div className="flex gap-1.5">
+            <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#DBEAFE", color: dash.blue }}>
+              ■ In optie
+            </span>
+            <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
+              ■ Aanvraag
+            </span>
+          </div>
         </div>
-        <div className="rounded-xl border-t-4 border-blue-500 bg-white p-3 shadow-sm">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Omzet nog te bevestigen</div>
-          <div className="text-lg font-extrabold text-blue-600">{formatEuro(totalRevenue)}</div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse text-[12px]">
+            <thead>
+              <tr>
+                {["#", "Project", "Status", "Periode tot", "Omzet"].map((h, i) => (
+                  <th key={h} className="px-3 py-2 text-[10px] font-semibold uppercase" style={{ background: dash.blue, color: "#fff", textAlign: i === 4 ? "right" : "left" }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {list.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-4 text-center text-sm" style={{ color: dash.mutedLight }}>
+                    Niets openstaand.
+                  </td>
+                </tr>
+              )}
+              {list.map((p) => (
+                <tr key={p.id} className="border-t" style={{ borderColor: "#F3F4F6" }}>
+                  <td className="px-3 py-1.5" style={{ color: dash.mutedLight }}>{p.projectNumber ?? "-"}</td>
+                  <td className="px-3 py-1.5">{p.name}</td>
+                  <td className="px-3 py-1.5">
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                      style={p.status === "Optie" ? { background: "#DBEAFE", color: dash.blue } : { background: "#FEF3C7", color: "#92400E" }}
+                    >
+                      {p.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 font-semibold" style={{ color: p.expired ? dash.redDark : dash.muted }}>
+                    {formatDate(p.planperiodEnd)}
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-semibold">{formatEuro(p.revenue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-
-      <Card className="p-0">
-        <p className="p-4 pb-0 text-sm text-slate-500">
-          Alle projecten met status &quot;Optie&quot; of &quot;Aanvraag&quot; -- gesorteerd op omzet, hoogste eerst.
-        </p>
-        <div className="mt-3 divide-y divide-slate-100">
-          {sorted.length === 0 && <p className="p-4 text-sm text-slate-500">Niets openstaand.</p>}
-          {sorted.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 p-4">
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-                  p.status === "Optie" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"
-                }`}
-              >
-                {p.status}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-800">
-                  {p.rentmanProjectNumber ? `${p.rentmanProjectNumber} · ` : ""}
-                  {p.name}
-                </p>
-                {p.planperiodStart && (
-                  <p className="text-xs text-slate-400">{p.planperiodStart.toLocaleDateString("nl-NL")}</p>
-                )}
-              </div>
-              <span className="text-sm font-bold text-slate-700">{formatEuro(p.revenue)}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }
