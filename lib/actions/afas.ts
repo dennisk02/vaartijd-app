@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/dal";
+import { requireAdminScope } from "@/lib/dal";
 import { syncPendingTimeEntries } from "@/lib/afas/hoursSync";
 import { testAfasConnection, AfasApiError } from "@/lib/afas/client";
 
@@ -13,7 +13,7 @@ export type AfasActionState =
   | undefined;
 
 export async function syncNow(_state: AfasActionState): Promise<AfasActionState> {
-  await requireAdmin();
+  await requireAdminScope("AFAS");
   const processed = await syncPendingTimeEntries();
   revalidatePath("/admin/afas");
   revalidatePath("/uren");
@@ -21,7 +21,7 @@ export async function syncNow(_state: AfasActionState): Promise<AfasActionState>
 }
 
 export async function testConnection(_state: AfasActionState): Promise<AfasActionState> {
-  await requireAdmin();
+  await requireAdminScope("AFAS");
   try {
     await testAfasConnection();
     return { message: "Verbinding met AFAS is gelukt." };

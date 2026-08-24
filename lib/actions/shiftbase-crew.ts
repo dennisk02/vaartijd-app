@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/dal";
+import { requireAdminScope } from "@/lib/dal";
 import { syncShiftbaseCrew } from "@/lib/shiftbase/sync";
 import { ShiftbaseApiError } from "@/lib/shiftbase/client";
 
@@ -13,7 +13,7 @@ export type ShiftbaseCrewSyncState =
   | undefined;
 
 export async function syncShiftbaseCrewNow(_state: ShiftbaseCrewSyncState): Promise<ShiftbaseCrewSyncState> {
-  await requireAdmin();
+  await requireAdminScope("SHIFTBASE");
 
   try {
     const result = await syncShiftbaseCrew();

@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/dal";
+import { requireAdminScope } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getPeriodRange, type ReportPeriod } from "@/lib/reports";
 
@@ -12,7 +12,7 @@ import { getPeriodRange, type ReportPeriod } from "@/lib/reports";
  * gemiddelde kunstmatig verlagen).
  */
 export async function getHoursReport(period: ReportPeriod) {
-  await requireAdmin();
+  await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
   const entries = await prisma.timeEntry.findMany({
@@ -46,7 +46,7 @@ export async function getHoursReport(period: ReportPeriod) {
  * van een gemiddelde van dag-totalen die zelf al een optelling zijn).
  */
 export async function getOccupancyReport(period: ReportPeriod) {
-  await requireAdmin();
+  await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
   const records = await prisma.shipOccupancy.findMany({
@@ -79,7 +79,7 @@ export async function getOccupancyReport(period: ReportPeriod) {
  * registraties.
  */
 export async function getMealsServedReport(period: ReportPeriod) {
-  await requireAdmin();
+  await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
   const records = await prisma.mealCount.findMany({
@@ -113,7 +113,7 @@ export async function getMealsServedReport(period: ReportPeriod) {
  * drukke dag.
  */
 export async function getFoodWasteReport(period: ReportPeriod) {
-  await requireAdmin();
+  await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
   const [wasteRecords, mealRecords] = await Promise.all([

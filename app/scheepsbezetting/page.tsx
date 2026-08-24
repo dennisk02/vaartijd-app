@@ -36,7 +36,7 @@ export default async function ScheepsbezettingPage() {
   }
 
   const [ships, occupancies] = await Promise.all([
-    getShipOptionsForUser(user.id),
+    getShipOptionsForUser(user.id, user.projectGroup),
     prisma.shipOccupancy.findMany({
       include: { ship: true },
       orderBy: { date: "desc" },

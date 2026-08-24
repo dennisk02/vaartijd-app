@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { isRentmanConfigured } from "@/lib/rentman/client";
+import { requireAdminScope } from "@/lib/dal";
 import { Card } from "@/components/ui";
 import { RentmanDashboardSyncControls } from "@/components/admin/rentman-dashboard/sync-controls";
 import { RentmanDashboardTabs } from "@/components/admin/rentman-dashboard/tabs";
@@ -13,6 +14,7 @@ import { dash } from "@/components/admin/rentman-dashboard/colors";
 import type { Subproject } from "@/lib/rentman/dashboardAggregate";
 
 export default async function RentmanFinancieelPage() {
+  await requireAdminScope("RENTMAN_FINANCIEEL");
   const configured = isRentmanConfigured();
 
   const [snapshotRows, invoicedMonthly] = await Promise.all([

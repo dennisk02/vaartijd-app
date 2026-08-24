@@ -1,4 +1,5 @@
 import { getSessionPayload } from "@/lib/session";
+import { userHasAdminScope } from "@/lib/dal";
 import { syncShiftbaseCrew } from "@/lib/shiftbase/sync";
 import { ShiftbaseApiError } from "@/lib/shiftbase/client";
 
@@ -16,7 +17,8 @@ async function isAuthorized(request: Request) {
   if (expectedSecret && providedSecret === expectedSecret) return true;
 
   const session = await getSessionPayload();
-  return session?.role === "ADMIN";
+  if (!session?.userId) return false;
+  return userHasAdminScope(session.userId, "SHIFTBASE");
 }
 
 async function handleImport(request: Request) {

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/dal";
+import { requireAdminScope } from "@/lib/dal";
 import { syncRentmanProjects } from "@/lib/rentman/sync";
 import { RentmanApiError } from "@/lib/rentman/client";
 
@@ -13,7 +13,7 @@ export type RentmanActionState =
   | undefined;
 
 export async function syncRentmanNow(_state: RentmanActionState): Promise<RentmanActionState> {
-  await requireAdmin();
+  await requireAdminScope("RENTMAN");
 
   try {
     const result = await syncRentmanProjects();

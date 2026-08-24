@@ -3,8 +3,20 @@
 import * as z from "zod";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/dal";
+import { requireAdmin, requireAdminScope } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import type { AdminScope } from "@prisma/client";
+
+const ADMIN_SCOPES: AdminScope[] = [
+  "PROJECTS",
+  "SHIPS",
+  "USERS",
+  "RENTMAN",
+  "RENTMAN_FINANCIEEL",
+  "SHIFTBASE",
+  "AFAS",
+  "RAPPORTAGES",
+];
 
 const ProjectSchema = z.object({
   name: z.string().min(1, "Vul een naam in."),
@@ -19,7 +31,7 @@ export type AdminFormState =
   | undefined;
 
 export async function createProject(_state: AdminFormState, formData: FormData): Promise<AdminFormState> {
-  await requireAdmin();
+  await requireAdminScope("PROJECTS");
 
   const validatedFields = ProjectSchema.safeParse({
     name: formData.get("name"),
@@ -41,7 +53,7 @@ export async function createProject(_state: AdminFormState, formData: FormData):
 }
 
 export async function toggleProjectActive(id: string, active: boolean) {
-  await requireAdmin();
+  await requireAdminScope("PROJECTS");
   await prisma.project.update({ where: { id }, data: { active } });
   revalidatePath("/admin/projects");
 }
@@ -56,7 +68,7 @@ const ShipSchema = z.object({
 });
 
 export async function createShip(_state: AdminFormState, formData: FormData): Promise<AdminFormState> {
-  await requireAdmin();
+  await requireAdminScope("SHIPS");
 
   const validatedFields = ShipSchema.safeParse({
     name: formData.get("name"),
@@ -80,7 +92,7 @@ export async function createShip(_state: AdminFormState, formData: FormData): Pr
 }
 
 export async function toggleShipActive(id: string, active: boolean) {
-  await requireAdmin();
+  await requireAdminScope("SHIPS");
   await prisma.ship.update({ where: { id }, data: { active } });
   revalidatePath("/admin/ships");
 }
@@ -130,13 +142,13 @@ export async function createUser(_state: AdminFormState, formData: FormData): Pr
 }
 
 export async function toggleUserActive(id: string, active: boolean) {
-  await requireAdmin();
+  await requireAdminScope("USERS");
   await prisma.user.update({ where: { id }, data: { active } });
   revalidatePath("/admin/users");
 }
 
 export async function updateUserAssignments(userId: string, formData: FormData) {
-  await requireAdmin();
+  const currentUser = await requireAdminScope("USERS");
 
   const projectIds = formData.getAll("projectIds").map(String);
   const shipIds = formData.getAll("shipIds").map(String);
@@ -146,10 +158,21 @@ export async function updateUserAssignments(userId: string, formData: FormData) 
   const useDefaultProject = formData.get("useDefaultProject") === "on";
   const defaultProjectId = String(formData.get("defaultProjectId") || "") || null;
   const shiftbaseEmployeeId = String(formData.get("shiftbaseEmployeeId") || "").trim() || null;
-  const projectGroupRaw = String(formData.get("projectGroup") || "ALL");
-  const projectGroup = ["ALL", "EVENTS", "EVENTO"].includes(projectGroupRaw)
-    ? (projectGroupRaw as "ALL" | "EVENTS" | "EVENTO")
-    : "ALL";
+  const projectGroupRaw = String(formData.get("projectGroup") || "EVENTS_EVENTO");
+  const projectGroup = ["EVENTS_EVENTO", "RIVER_ROOTS"].includes(projectGroupRaw)
+    ? (projectGroupRaw as "EVENTS_EVENTO" | "RIVER_ROOTS")
+    : "EVENTS_EVENTO";
+
+  // Scoped Medewerkers-beheerders (role !== "ADMIN") mogen bestaande
+  // toewijzingen/instellingen bewerken, maar niet iemands admin-scopes
+  // wijzigen -- dat blijft aan volledige beheerders voorbehouden (voorkomt
+  // zelf-escalatie). Het formulier verbergt dit veld al voor scoped
+  // beheerders (zie app/admin/users/[id]/page.tsx), maar de server-actie
+  // valideert het onafhankelijk nogmaals i.p.v. alleen op UI te vertrouwen.
+  const adminScopes =
+    currentUser.role === "ADMIN"
+      ? formData.getAll("adminScopes").map(String).filter((s): s is AdminScope => ADMIN_SCOPES.includes(s as AdminScope))
+      : undefined;
 
   await prisma.user.update({
     where: { id: userId },
@@ -163,9 +186,23 @@ export async function updateUserAssignments(userId: string, formData: FormData) 
       defaultProjectId,
       shiftbaseEmployeeId,
       projectGroup,
+      ...(adminScopes !== undefined ? { adminScopes: { set: adminScopes } } : {}),
     },
   });
 
   revalidatePath(`/admin/users/${userId}`);
   revalidatePath("/admin/users");
+}
+
+/** Handmatige 2FA-reset (bv. telefoon kwijt) -- alleen volledige beheerders,
+ * geen scoped Medewerkers-beheerders, want het is in feite een
+ * beveiligingsreset. Bij de volgende login moet de medewerker 2FA opnieuw
+ * instellen (zie proxy.ts). */
+export async function resetUserTotp(userId: string) {
+  await requireAdmin();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { totpEnabled: false, totpSecret: null, totpSecretPending: null },
+  });
+  revalidatePath(`/admin/users/${userId}`);
 }

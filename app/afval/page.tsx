@@ -40,7 +40,7 @@ export default async function AfvalPage() {
   }
 
   const [ships, wasteEntries] = await Promise.all([
-    getShipOptionsForUser(user.id),
+    getShipOptionsForUser(user.id, user.projectGroup),
     prisma.foodWaste.findMany({
       include: { ship: true },
       orderBy: { date: "desc" },

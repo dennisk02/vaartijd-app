@@ -3,8 +3,15 @@
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { createSession, deleteSession } from "@/lib/session";
-import { LoginFormSchema, type LoginFormState } from "@/lib/definitions";
+import {
+  createSession,
+  createPendingTotpSession,
+  getPendingTotpSession,
+  clearPendingTotpSession,
+  deleteSession,
+} from "@/lib/session";
+import { verifyTotpToken } from "@/lib/totp";
+import { LoginFormSchema, type LoginFormState, type TotpFormState } from "@/lib/definitions";
 
 export async function login(_state: LoginFormState, formData: FormData): Promise<LoginFormState> {
   const validatedFields = LoginFormSchema.safeParse({
@@ -28,7 +35,39 @@ export async function login(_state: LoginFormState, formData: FormData): Promise
     return { message: "Onjuiste combinatie van e-mailadres en wachtwoord." };
   }
 
-  await createSession({ userId: user.id, role: user.role });
+  // 2FA is verplicht voor alle accounts. Al ingesteld -> eerst de TOTP-code
+  // verifiëren (tussenstap-cookie, nog geen volledige sessie). Nog niet
+  // ingesteld -> wél meteen een volledige sessie (er is nog niets om tegen
+  // te verifiëren), maar proxy.ts dwingt vervolgens /2fa-instellen af
+  // totdat de instelprocedure is afgerond.
+  if (user.totpEnabled) {
+    await createPendingTotpSession({ userId: user.id });
+    redirect("/2fa-verify");
+  }
+
+  await createSession({ userId: user.id, role: user.role, totpEnabled: false });
+  redirect("/2fa-instellen");
+}
+
+export async function verifyTotpLogin(_state: TotpFormState, formData: FormData): Promise<TotpFormState> {
+  const pending = await getPendingTotpSession();
+  if (!pending?.userId) {
+    redirect("/login");
+  }
+
+  const code = String(formData.get("code") ?? "").trim();
+
+  const user = await prisma.user.findUnique({ where: { id: pending.userId } });
+  if (!user || !user.active || !user.totpEnabled || !user.totpSecret) {
+    redirect("/login");
+  }
+
+  if (!verifyTotpToken(user.totpSecret, code)) {
+    return { message: "Onjuiste code. Probeer opnieuw." };
+  }
+
+  await clearPendingTotpSession();
+  await createSession({ userId: user.id, role: user.role, totpEnabled: true });
   redirect("/");
 }
 

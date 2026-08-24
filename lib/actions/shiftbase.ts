@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/dal";
+import { requireAdminScope } from "@/lib/dal";
 import { shiftbaseGet, ShiftbaseApiError } from "@/lib/shiftbase/client";
 
 export type ShiftbaseQueryState =
@@ -11,7 +11,7 @@ export type ShiftbaseQueryState =
   | undefined;
 
 export async function queryShiftbase(_state: ShiftbaseQueryState, formData: FormData): Promise<ShiftbaseQueryState> {
-  await requireAdmin();
+  await requireAdminScope("SHIFTBASE");
 
   const path = String(formData.get("path") || "").trim();
   if (!path) {

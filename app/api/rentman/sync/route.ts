@@ -1,4 +1,5 @@
 import { getSessionPayload } from "@/lib/session";
+import { userHasAdminScope } from "@/lib/dal";
 import { syncRentmanProjects } from "@/lib/rentman/sync";
 import { syncRentmanDashboard } from "@/lib/rentman/dashboardSync";
 import { RentmanApiError } from "@/lib/rentman/client";
@@ -15,7 +16,8 @@ async function isAuthorized(request: Request) {
   if (expectedSecret && providedSecret === expectedSecret) return true;
 
   const session = await getSessionPayload();
-  return session?.role === "ADMIN";
+  if (!session?.userId) return false;
+  return userHasAdminScope(session.userId, "RENTMAN");
 }
 
 async function handleSync(request: Request) {

@@ -21,13 +21,32 @@ enum Language {
 }
 
 /// Bedrijfsonderdeel waar een medewerker onder valt, gebruikt om de
-/// projectenlijst bij urenregistratie te beperken tot relevante projecten.
-/// Projecten worden hieraan gekoppeld op basis van hun naam (voorvoegsel
-/// "EVENTO - " => EVENTO, anders => EVENTS) -- zie lib/assignments.ts.
+/// projectenlijst (en schepenlijst) bij urenregistratie te beperken tot
+/// relevante projecten. EVENTS_EVENTO = alle Rentman-afkomstige projecten
+/// (administraties 02 Events + 21 Evento samen); RIVER_ROOTS = de
+/// vaarbemanning-projecten/-schepen uit Shiftbase. Onderscheid op
+/// `shiftbaseDepartmentId` (wel/niet ingevuld), niet op naam -- zie
+/// lib/assignments.ts. De Events/Evento-onderverdeling zelf (voor Rentman-
+/// administratieroutering 02/21, op basis van het "EVENTO - "-naamvoorvoegsel)
+/// blijft een aparte, interne regel in lib/rentman/sync.ts en is geen
+/// onderdeel meer van deze zichtbaarheidskeuze.
 enum ProjectGroup {
-  ALL
-  EVENTS
-  EVENTO
+  EVENTS_EVENTO
+  RIVER_ROOTS
+}
+
+/// De 8 beheerbare onderdelen van /admin/*. Een medewerker die geen
+/// volledige beheerder (Role.ADMIN) is kan hier los in toegewezen krijgen --
+/// zie User.adminScopes en lib/dal.ts (requireAdminScope).
+enum AdminScope {
+  PROJECTS
+  SHIPS
+  USERS
+  RENTMAN
+  RENTMAN_FINANCIEEL
+  SHIFTBASE
+  AFAS
+  RAPPORTAGES
 }
 
 enum SyncStatus {
@@ -69,7 +88,19 @@ model User {
   canLogWaste        Boolean         @default(true)
   useDefaultProject  Boolean         @default(false)
   defaultProjectId   String?
-  projectGroup       ProjectGroup    @default(ALL)
+  projectGroup       ProjectGroup    @default(EVENTS_EVENTO)
+  /// Welke admin-onderdelen deze medewerker mag beheren zonder volledig
+  /// beheerder (Role.ADMIN) te zijn -- zie lib/dal.ts (requireAdminScope).
+  /// Volledige beheerders omzeilen deze lijst altijd (zie requireAdminScope).
+  adminScopes        AdminScope[]    @default([])
+  /// TOTP-2FA (verplicht voor alle accounts, zie proxy.ts). totpSecretPending
+  /// bewaart het secret tijdens een nog onbevestigde instelprocedure, apart
+  /// van totpSecret zodat de status nooit dubbelzinnig is: geen van beide =
+  /// nooit gestart; alleen Pending = QR getoond maar nog niet bevestigd;
+  /// totpSecret + totpEnabled = volledig ingesteld.
+  totpEnabled        Boolean         @default(false)
+  totpSecret         String?
+  totpSecretPending  String?
   defaultProject     Project?        @relation("UserDefaultProject", fields: [defaultProjectId], references: [id], onDelete: SetNull)
   createdAt          DateTime        @default(now())
   timeEntries        TimeEntry[]

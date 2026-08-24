@@ -40,7 +40,7 @@ export default async function MaaltijdenPage() {
   }
 
   const [ships, meals] = await Promise.all([
-    getShipOptionsForUser(user.id),
+    getShipOptionsForUser(user.id, user.projectGroup),
     prisma.mealCount.findMany({
       include: { ship: true },
       orderBy: { date: "desc" },

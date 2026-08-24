@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import { requireAdminScope } from "@/lib/dal";
 import { Card, Button } from "@/components/ui";
 import { ShipForm } from "@/components/admin/ship-form";
 import { toggleShipActive } from "@/lib/actions/admin";
 
 export default async function AdminShipsPage() {
+  await requireAdminScope("SHIPS");
   const ships = await prisma.ship.findMany({ orderBy: { createdAt: "desc" } });
 
   return (

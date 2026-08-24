@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { isShiftbaseConfigured, isShiftbaseHoursExportEnabled } from "@/lib/shiftbase/client";
+import { requireAdminScope } from "@/lib/dal";
 import { Card, SyncStatusBadge } from "@/components/ui";
 import { ShiftbaseExplorer } from "@/components/admin/shiftbase-explorer";
 import { ShiftbaseHoursControls } from "@/components/admin/shiftbase-hours-controls";
 import { ShiftbaseCrewControls } from "@/components/admin/shiftbase-crew-controls";
 
 export default async function AdminShiftbasePage() {
+  await requireAdminScope("SHIFTBASE");
   const configured = isShiftbaseConfigured();
   const exportEnabled = isShiftbaseHoursExportEnabled();
 

@@ -1,9 +1,11 @@
+import { requireAdminScope } from "@/lib/dal";
 import { HoursReportChart } from "@/components/admin/reports/hours-report-chart";
 import { OccupancyReportChart } from "@/components/admin/reports/occupancy-report-chart";
 import { MealsServedChart } from "@/components/admin/reports/meals-served-chart";
 import { FoodWasteChart } from "@/components/admin/reports/food-waste-chart";
 
-export default function AdminRapportagesPage() {
+export default async function AdminRapportagesPage() {
+  await requireAdminScope("RAPPORTAGES");
   return (
     <div className="flex flex-col gap-6">
       <div>

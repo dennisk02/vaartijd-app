@@ -2,10 +2,12 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, ProjectGroup } from "@prisma/client";
 
-/// Rentman-subprojecten met dit voorvoegsel horen bij administratie 21
-/// (Evento); alle andere projecten horen bij administratie 02 (Events). Zie
-/// ook lib/rentman/sync.ts en de afspraak met de gebruiker hierover.
-const EVENTO_PREFIX = "EVENTO - ";
+/// EVENTS_EVENTO/RIVER_ROOTS-onderscheid is gebaseerd op herkomst
+/// (`shiftbaseDepartmentId` wel/niet ingevuld), niet op naam -- zie de
+/// ProjectGroup-enum-comment in prisma/schema.prisma. Het "EVENTO - "-
+/// naamvoorvoegsel is een aparte, interne regel voor Rentman-
+/// administratieroutering (02 Events / 21 Evento, zie `EVENTO_PREFIX` in
+/// lib/rentman/sync.ts) en speelt geen rol meer in deze zichtbaarheidskeuze.
 
 /// Alleen de velden die de projectkeuze-UI daadwerkelijk gebruikt -- scheelt
 /// zowel database- als netwerkverkeer t.o.v. hele rijen ophalen, zeker
@@ -20,9 +22,11 @@ const PROJECT_OPTION_SELECT = {
 type ProjectOption = Prisma.ProjectGetPayload<{ select: typeof PROJECT_OPTION_SELECT }>;
 
 function projectGroupWhere(group: ProjectGroup): Prisma.ProjectWhereInput {
-  if (group === "EVENTO") return { name: { startsWith: EVENTO_PREFIX } };
-  if (group === "EVENTS") return { NOT: { name: { startsWith: EVENTO_PREFIX } } };
-  return {};
+  return group === "RIVER_ROOTS" ? { shiftbaseDepartmentId: { not: null } } : { shiftbaseDepartmentId: null };
+}
+
+function shipGroupWhere(group: ProjectGroup): Prisma.ShipWhereInput {
+  return group === "RIVER_ROOTS" ? { shiftbaseDepartmentId: { not: null } } : { shiftbaseDepartmentId: null };
 }
 
 /**
@@ -45,12 +49,12 @@ function sortByRecency(projects: ProjectOption[]): ProjectOption[] {
  * Geeft de projecten die een medewerker mag kiezen: alleen de actieve,
  * toegewezen projecten als er iets is toegewezen, anders (nog niets
  * toegewezen door de beheerder) alle actieve projecten binnen de
- * projectgroep van de medewerker (Events/Evento/Alle). Binnen beide gevallen
- * staat het project met de dichtstbijzijnde startdatum bovenaan. Filtering
- * (actief + projectgroep) gebeurt in de database-query zelf, niet achteraf
- * in JS.
+ * projectgroep van de medewerker (Events & Evento / River Roots). Binnen
+ * beide gevallen staat het project met de dichtstbijzijnde startdatum
+ * bovenaan. Filtering (actief + projectgroep) gebeurt in de database-query
+ * zelf, niet achteraf in JS.
  */
-export async function getProjectOptionsForUser(userId: string, projectGroup: ProjectGroup = "ALL") {
+export async function getProjectOptionsForUser(userId: string, projectGroup: ProjectGroup = "EVENTS_EVENTO") {
   const assigned = await prisma.project.findMany({
     where: { assignedUsers: { some: { id: userId } }, active: true },
     select: PROJECT_OPTION_SELECT,
@@ -68,7 +72,7 @@ export async function getProjectOptionsForUser(userId: string, projectGroup: Pro
 }
 
 /** Zelfde principe als getProjectOptionsForUser, maar dan voor schepen. */
-export async function getShipOptionsForUser(userId: string) {
+export async function getShipOptionsForUser(userId: string, projectGroup: ProjectGroup = "EVENTS_EVENTO") {
   const select = { id: true, name: true, capacity: true } satisfies Prisma.ShipSelect;
 
   const assigned = await prisma.ship.findMany({
@@ -79,5 +83,9 @@ export async function getShipOptionsForUser(userId: string) {
 
   if (assigned.length > 0) return assigned;
 
-  return prisma.ship.findMany({ where: { active: true }, orderBy: { name: "asc" }, select });
+  return prisma.ship.findMany({
+    where: { active: true, ...shipGroupWhere(projectGroup) },
+    orderBy: { name: "asc" },
+    select,
+  });
 }

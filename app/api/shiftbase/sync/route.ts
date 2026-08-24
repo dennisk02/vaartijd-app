@@ -1,4 +1,5 @@
 import { getSessionPayload } from "@/lib/session";
+import { userHasAdminScope } from "@/lib/dal";
 import { syncPendingTimeEntries } from "@/lib/shiftbase/hoursSync";
 import { isShiftbaseHoursExportEnabled } from "@/lib/shiftbase/client";
 
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
     if (!session?.userId) {
       return new Response(null, { status: 401 });
     }
-    if (session.role !== "ADMIN") {
+    if (!(await userHasAdminScope(session.userId, "SHIFTBASE"))) {
       return new Response(null, { status: 403 });
     }
   }

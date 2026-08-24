@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { requireAdminScope } from "@/lib/dal";
 import { Card, Button } from "@/components/ui";
 import { UserForm } from "@/components/admin/user-form";
 import { toggleUserActive } from "@/lib/actions/admin";
@@ -7,13 +8,16 @@ import { toggleUserActive } from "@/lib/actions/admin";
 const roleLabels: Record<string, string> = { EMPLOYEE: "Medewerker", ADMIN: "Beheerder" };
 
 export default async function AdminUsersPage() {
+  const currentUser = await requireAdminScope("USERS");
   const users = await prisma.user.findMany({ orderBy: { createdAt: "desc" } });
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <UserForm />
-      </Card>
+      {currentUser.role === "ADMIN" && (
+        <Card>
+          <UserForm />
+        </Card>
+      )}
       <div className="flex flex-col gap-3">
         {users.map((user) => (
           <Card key={user.id} className="flex items-center justify-between">

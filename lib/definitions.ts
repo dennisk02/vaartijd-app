@@ -14,3 +14,9 @@ export type LoginFormState =
       message?: string;
     }
   | undefined;
+
+export type TotpFormState =
+  | {
+      message?: string;
+    }
+  | undefined;

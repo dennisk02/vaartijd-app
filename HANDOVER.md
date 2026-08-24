@@ -21,7 +21,7 @@ Een mobile-first PWA voor een maritiem/evenementenbedrijf (rederij + verhuur-/ca
 - maaltijden (aantallen) en voedselverspilling (kg) registreren per schip,
 - hun dag "indienen" (vergrendelt die dag's eigen registraties),
 
-en waarmee beheerders:
+en waarmee beheerders (volledig, of scoped tot losse onderdelen — zie §6):
 
 - medewerkers, projecten en schepen beheren,
 - per medewerker instellen welke onderdelen zichtbaar zijn en of ze een vast project hebben,
@@ -31,15 +31,20 @@ en waarmee beheerders:
 - het financiële Rentman-dashboard bekijken (omzet, facturatie, annuleringen, openstaande
   opties/aanvragen — draait elke nacht automatisch mee met de Rentman-sync). Zie §10.5.
 
+Alle gebruikers loggen in met wachtwoord + verplichte TOTP-2FA (authenticator-app). Zie §6.
+
 De twee bedrijfsonderdelen "Events" (administratie 02) en "Evento" (administratie 21) worden
 in de hele app uit elkaar gehouden op basis van een naamconventie: een project dat uit Rentman
 komt en waarvan de naam begint met `"EVENTO - "` hoort bij Evento; alle andere projecten horen
-bij Events. Zie [§10.2](#102-rentman-read-only-projectimport) en `lib/assignments.ts`.
+bij Events. Zie [§10.2](#102-rentman-read-only-projectimport) en `EVENTO_PREFIX` in
+`lib/rentman/sync.ts`. Dit is een aparte regel van de gebruikers-zichtbaarheidskeuze hieronder.
 
-Daarnaast is er een **derde, aparte groep**: de vaarbemanning van de River Roots-vloot (~270
-mensen, Kitchen/Housekeeping/Management-rollen per schip), die niet in Rentman zit maar in
-Shiftbase wordt bijgehouden en sinds 21 aug 2026 automatisch wordt geïmporteerd. Zie §10.3
-hieronder.
+Daarnaast is er een **aparte groep**: de vaarbemanning van de River Roots-vloot (~270 mensen,
+Kitchen/Housekeeping/Management-rollen per schip), die niet in Rentman zit maar in Shiftbase
+wordt bijgehouden en sinds 21 aug 2026 automatisch wordt geïmporteerd (§10.3). Sinds 24 aug 2026
+is dit ook de gebruikers-zichtbaarheidskeuze zelf: `User.projectGroup` is
+`EVENTS_EVENTO` (Rentman-projecten, Events+Evento samen) of `RIVER_ROOTS` (deze vaarbemanning),
+zie §6.
 
 ---
 
@@ -54,6 +59,7 @@ hieronder.
 | ORM | **Prisma 5.22** |
 | Auth | Eigen, stateless sessie-implementatie: JWT (HS256) via **jose**, in een `httpOnly` cookie. Geen NextAuth/Clerk/etc. |
 | Wachtwoorden | **bcryptjs** |
+| 2FA | **otpauth** (TOTP) + **qrcode** (QR als SVG, geen native canvas-dependency) — zie §6 |
 | Grafieken | **Recharts** |
 | Hosting | **Vercel** (project `vaartijd-app`, team/scope `dennis-k`) |
 | Cron | Vercel Cron (`vercel.json`) — Hobby-plan, dus **max. 1x/dag** per cron |
@@ -85,8 +91,9 @@ toekomstige AI-coding-assistenten die hier niet automatisch tegenaan lopen.
 
 ```
 app/                          # App Router — pagina's + API routes
-  admin/                      # Beheerscherm (guard: requireAdmin() in app/admin/layout.tsx)
+  admin/                      # Beheerscherm (guard per pagina: requireAdminScope(), zie §6)
     afas/ projects/ rapportages/ rentman/ rentman-financieel/ ships/ shiftbase/ users/
+  2fa-instellen/  2fa-verify/  # Verplichte TOTP-instel- resp. inlog-verificatiepagina, zie §6
   api/
     afas/sync/route.ts            # Externe trigger (cron/secret) voor AFAS-export
     rentman/sync/route.ts         # Externe trigger (cron/secret) voor Rentman-import
@@ -102,6 +109,7 @@ components/
   nav.tsx                     # NavBar (taal, uitloggen, navigatie)
   project-picker.tsx          # Doorzoekbare projectkeuze (naam + Rentman-nummer)
   searchable-checkbox-group.tsx
+  totp-setup-form.tsx         # Client-formulier voor de 2FA-instelpagina
   timer-widget.tsx  hours-entry.tsx  time-entry-form.tsx
   ship-occupancy-form.tsx  meal-count-form.tsx  food-waste-form.tsx
   admin/                      # Beheer-specifieke componenten (forms, project-list, reports/*,
@@ -109,14 +117,17 @@ components/
                                # colors.ts/kpi-card.tsx als gedeelde, pixel-exacte bouwstenen)
 
 lib/
-  session.ts  dal.ts          # Sessiebeheer (jose/JWT) + Data Access Layer (requireAdmin, getUser)
+  session.ts  dal.ts          # Sessiebeheer (jose/JWT, incl. 2FA-tussenstap-cookie) + Data
+                               # Access Layer (requireAdmin, requireAdminScope, getUser) -- §6
+  totp.ts                     # TOTP-2FA-kernlogica (otpauth + qrcode), zie §6
   prisma.ts                   # Prisma-client singleton
-  assignments.ts              # Welke projecten/schepen mag een medewerker kiezen
+  assignments.ts              # Welke projecten/schepen mag een medewerker kiezen (projectGroup)
   daily-summary.ts            # Dagoverzicht (home, geschiedenis, dag-indienen) — batched i.p.v. N+1
   day-submission.ts           # isDateSubmitted() — of een dag al "ingediend" is
   reports.ts                  # Periode-utility voor rapportages
   timer.ts  dates.ts  definitions.ts  i18n.ts
   actions/                    # "use server" — alle mutaties, per domein
+                               # (auth.ts + twofactor.ts: login/2FA-verificatie/2FA-instellen)
   afas/                       # AFAS Profit REST-koppeling (client + hoursSync)
   rentman/                    # Rentman REST-koppeling: client.ts + sync.ts (projectimport) +
                                # dashboardSync.ts + dashboardAggregate.ts (financieel dashboard,
@@ -143,9 +154,11 @@ Volledige bron: [`prisma/schema.prisma`](prisma/schema.prisma). Kernpunten per m
 
 - **`User`** — rol (`EMPLOYEE`/`ADMIN`), taal, per-onderdeel zichtbaarheid
   (`canLogOccupancy/Meals/Waste`), optioneel een vast project (`useDefaultProject` +
-  `defaultProjectId`), `projectGroup` (`ALL`/`EVENTS`/`EVENTO`, bepaalt welke projecten
-  iemand standaard ziet), koppelvelden voor AFAS (`afasEmployeeNumber`) en Shiftbase
-  (`shiftbaseEmployeeId`).
+  `defaultProjectId`), `projectGroup` (`EVENTS_EVENTO`/`RIVER_ROOTS`, bepaalt welke projecten
+  én schepen iemand standaard ziet — zie §6), `adminScopes` (`AdminScope[]`, welke
+  admin-onderdelen deze gebruiker mag beheren zonder volledig beheerder te zijn, zie §6),
+  TOTP-2FA-velden (`totpEnabled`/`totpSecret`/`totpSecretPending`, zie §6), koppelvelden voor
+  AFAS (`afasEmployeeNumber`) en Shiftbase (`shiftbaseEmployeeId`).
 - **`Project`** — kan handmatig aangemaakt zijn, uit Rentman komen
   (`rentmanSubprojectId` e.a. `rentman*`-velden gevuld), of automatisch aangemaakt zijn als
   "vaarbemanning"-project bij een Shiftbase-schip (`shiftbaseDepartmentId`, uniek — zie §10.3).
@@ -189,22 +202,97 @@ allemaal uniek — dat zijn de sleutels waarop de Shiftbase-vaarbemanning-import
 
 ## 6. Authenticatie & autorisatie
 
-Geen externe auth-provider — bewust eenvoudig gehouden:
+Geen externe auth-provider — bewust eenvoudig gehouden, uitgebreid op 24 aug 2026 met
+scoped admin-rechten en verplichte TOTP-2FA.
 
-1. **`lib/session.ts`** — JWT (HS256, ondertekend met `SESSION_SECRET`) met `{ userId, role }`,
-   in een `httpOnly`, `sameSite=lax` cookie, 7 dagen geldig.
-2. **`proxy.ts`** — redirect naar `/login` als er geen geldige sessie is (behalve op
-   `/login` zelf); redirect ingelogde gebruikers weg van `/login`.
-3. **`lib/dal.ts`** (Data Access Layer) — `getUser()` (React `cache()`-gewrapt, dus 1x per
-   request-render) haalt de actuele gebruiker uit de database op basis van de sessie, en
-   `requireAdmin()` gooit een 403 (`forbidden()`) als de rol niet `ADMIN` is. **Elke**
-   server-pagina en server action die autorisatie nodig heeft roept een van deze twee aan —
-   er is geen aparte globale check verder dan de proxy-redirect.
+1. **`lib/session.ts`** — JWT (HS256, ondertekend met `SESSION_SECRET`) met
+   `{ userId, role, totpEnabled }`, in een `httpOnly`, `sameSite=lax` cookie, 7 dagen geldig.
+   `totpEnabled` zit in de sessie zelf (niet alleen in de database) zodat `proxy.ts` 2FA kan
+   afdwingen zonder een databasecall per request. Daarnaast een **tweede, kortlevende cookie**
+   (`2fa_pending`, ~5 minuten, payload `{ userId }` zonder `role`) voor de tussenstap
+   "wachtwoord goed, TOTP-code nog nodig" (`createPendingTotpSession` e.a. in `lib/session.ts`).
+2. **`proxy.ts`** — redirect naar `/login` als er geen geldige sessie is (`/login` en
+   `/2fa-verify` zijn de enige publieke routes); redirect ingelogde gebruikers weg van `/login`;
+   **nieuw**: redirect elke sessie met `totpEnabled=false` naar `/2fa-instellen` (behalve die
+   pagina zelf) — 2FA is verplicht voor alle accounts, geen uitzondering per persoon.
+3. **`lib/dal.ts`** (Data Access Layer) — `getUser()` (React `cache()`-gewrapt) haalt de actuele
+   gebruiker op. Autorisatiehelpers:
+   - `requireAdmin()` — **volledige** beheerder (`role === "ADMIN"`), ongewijzigd, gebruikt voor
+     de paar acties die bewust niet delegeerbaar zijn (nieuwe accounts aanmaken, rollen/
+     admin-scopes van anderen wijzigen, 2FA van iemand resetten).
+   - `requireAdminScope(scope: AdminScope)` — **nieuw**: toegang tot één specifiek admin-
+     onderdeel. Volledige beheerders omzeilen dit altijd; overige gebruikers moeten `scope`
+     expliciet toegewezen hebben via `User.adminScopes`. Gebruikt door elke `/admin/<sectie>`-
+     pagina zelf (niet meer alleen de gedeelde layout) en de bijbehorende server actions.
+   - `requireAnyAdminScope()` — toegang tot de admin-shell (`app/admin/layout.tsx`): minstens
+     één onderdeel toegewezen (of volledig beheerder).
+   - `userHasAdminScope(userId, scope)` — niet-gooiende variant voor de externe
+     cron/secret-trigger-routes (`app/api/*/sync`, `.../crew-import`), die hun secret als
+     primaire auth gebruiken en een ingelogde-sessie-check alleen als terugval.
 
-Wachtwoorden: bcryptjs, 10 rounds. Geen 2FA, geen "wachtwoord vergeten"-flow — een beheerder
-kan wel een tijdelijk wachtwoord instellen bij het aanmaken van een account
-(`components/admin/user-form.tsx`); er is geen wijzig-eigen-wachtwoord-scherm voor
-medewerkers zelf. Dat is een bekend ontbrekend stukje, zie [§17](#17-bekende-openstaande-punten).
+   **Belangrijk gat gevonden en gefixt tijdens het bouwen van deze feature:** `forbidden()`
+   (gebruikt door alle bovenstaande helpers) vereist `experimental.authInterrupts: true` in
+   `next.config.ts` — stond nooit aan, maar dat viel nooit op omdat tot nu toe alleen echte
+   volledige beheerders deze guards raakten (dus `forbidden()` werd in de praktijk nooit
+   aangeroepen). Met scoped admin-rechten wordt dat pad nu wél echt bereikt door
+   niet-geautoriseerde gebruikers, en gaf zonder de config-vlag een kale 500 i.p.v. de
+   403-pagina. Nu aangezet, zie `next.config.ts`.
+
+### Scoped admin-rechten (`User.adminScopes`, `AdminScope`-enum)
+
+Een medewerker kan, zonder volledig beheerder (`role: ADMIN`) te zijn, toegang krijgen tot één
+of meer van de 8 admin-onderdelen (`PROJECTS`/`SHIPS`/`USERS`/`RENTMAN`/`RENTMAN_FINANCIEEL`/
+`SHIFTBASE`/`AFAS`/`RAPPORTAGES`) — bv. om alleen Rapportages te mogen inzien, of alleen
+Projecten te beheren. Ingesteld via `app/admin/users/[id]/page.tsx` (sectie "Scoped
+beheerder-onderdelen", alleen zichtbaar/wijzigbaar voor volledige beheerders zelf — een scoped
+Medewerkers-beheerder ziet dit blok niet, en de server-actie (`updateUserAssignments` in
+`lib/actions/admin.ts`) valideert dat onafhankelijk nogmaals i.p.v. alleen op de UI te
+vertrouwen, om zelf-escalatie te voorkomen). `app/admin/layout.tsx` filtert de tabbladen op wat
+de ingelogde gebruiker mag zien; elke individuele `/admin/<sectie>`-pagina heeft daarnaast zijn
+eigen `requireAdminScope(...)`-guard (nodig omdat de gedeelde layout nu ook niet-volledige
+beheerders doorlaat, gefilterd op tabs — directe URL-navigatie naar een niet-toegewezen sectie
+moet alsnog een 403 geven).
+
+**Bewuste grens (afgesproken met de klant):** een scoped Medewerkers-beheerder (`USERS`-scope,
+niet volledig beheerder) kan bestaande medewerkers bewerken (toewijzingen, projectgroep,
+onderdelen aan/uit), maar **niet** nieuwe accounts aanmaken en **niet** iemands admin-scopes of
+rol wijzigen — dat blijft aan volledige beheerders voorbehouden.
+
+### TOTP-2FA (verplicht voor alle accounts)
+
+Authenticator-app-gebaseerd (Google/Microsoft Authenticator e.d.), 6 cijfers, 30 seconden,
+SHA1 — de universeel ondersteunde combinatie. Nieuwe dependencies: `otpauth` (TOTP-kernlogica,
+zero-dep) en `qrcode` (QR-rendering, **als SVG-string** i.p.v. PNG/canvas om elke native
+dependency te vermijden — relevant gezien de Windows/Prisma-DLL-valkuil elders in dit project).
+Module: `lib/totp.ts`.
+
+- **`User.totpEnabled`/`totpSecret`/`totpSecretPending`** — drie velden i.p.v. twee, zodat de
+  status nooit dubbelzinnig is: geen van beide secret-velden = nooit gestart; alleen
+  `totpSecretPending` = QR getoond maar nog niet bevestigd; `totpSecret` + `totpEnabled` =
+  volledig ingesteld.
+- **Inlogflow** (`lib/actions/auth.ts`): na een geslaagde wachtwoordcheck —
+  - `totpEnabled=true` → een tussenstap-cookie (`createPendingTotpSession`, geen volledige
+    sessie) + redirect naar `/2fa-verify`, waar `verifyTotpLogin` de code checkt en pas dan de
+    echte sessie aanmaakt.
+  - `totpEnabled=false` → wél meteen een volledige sessie (er is nog niets om tegen te
+    verifiëren), maar `proxy.ts` dwingt vervolgens `/2fa-instellen` af totdat de
+    instelprocedure is afgerond.
+- **`app/2fa-instellen/page.tsx`** — verplichte instelpagina: genereert bij eerste bezoek een
+  onbevestigd secret (`totpSecretPending`) en toont de QR + een tekst-fallback voor handmatige
+  invoer; `confirmTotpSetup` (`lib/actions/twofactor.ts`) zet het secret bij een geldige code
+  definitief vast.
+- **2FA resetten** — knop op `app/admin/users/[id]/page.tsx`, actie `resetUserTotp` in
+  `lib/actions/admin.ts`, **bewust `requireAdmin()` (vol, niet scoped)** omdat het in feite een
+  beveiligingsreset is. Voor als iemand zijn telefoon kwijtraakt — zet `totpEnabled=false` en
+  wist beide secret-velden, waarna de medewerker bij de volgende login 2FA opnieuw moet
+  instellen. Geen self-service "2FA uitzetten" — dat zou de verplichting ondermijnen.
+- **Niet gebouwd (bewust, buiten scope):** rate-limiting op foutieve codes, en een
+  "back-up codes"-mechanisme voor het geval iemand zowel zijn telefoon als een beheerder
+  kwijt is (niet van toepassing hier, een beheerder kan altijd resetten).
+
+Wachtwoorden: bcryptjs, 10 rounds. Nog steeds geen "wachtwoord vergeten"-flow voor medewerkers
+zelf — een beheerder kan wel een tijdelijk wachtwoord instellen bij het aanmaken van een account
+(`components/admin/user-form.tsx`). Zie [§17](#17-bekende-openstaande-punten).
 
 ---
 
@@ -222,18 +310,25 @@ medewerkers zelf. Dat is een bekend ontbrekend stukje, zie [§17](#17-bekende-op
 | `/dag-indienen` | Bevestig en vergrendel de dag |
 
 Zichtbaarheid van bezetting/maaltijden/afval is per medewerker uit te zetten door een
-beheerder (`User.canLogOccupancy/Meals/Waste`).
+beheerder (`User.canLogOccupancy/Meals/Waste`). Een gewone medewerker kan daarnaast, via
+`adminScopes`, toegang tot één of meer admin-onderdelen krijgen zonder beheerder te zijn — zie
+[§6](#6-authenticatie--autorisatie).
 
-### Beheerder (`/admin/*`, guard in `app/admin/layout.tsx`)
-| Pagina | Doel |
-|---|---|
-| `/admin/rapportages` | 4 grafieken (uren, bezetting, maaltijden, afval) met periodekeuze |
-| `/admin/projects` | Projecten aanmaken/(de)activeren, doorzoekbare lijst |
-| `/admin/ships` | Schepen aanmaken/(de)activeren, incl. capaciteit |
-| `/admin/users` → `/admin/users/[id]` | Medewerkers aanmaken; per medewerker: projectgroep, specifieke project-/scheepstoewijzing (doorzoekbaar), zichtbare onderdelen, vast project, Shiftbase-ID |
-| `/admin/rentman` | Rentman-syncstatus, handmatige sync-trigger, lijst laatst-gesyncte projecten |
-| `/admin/afas` | AFAS-syncstatus (pending/synced/error-tellingen + foutmeldingen) |
-| `/admin/shiftbase` | Vaarbemanning-import (River Roots, werkend) + read-only API-verkenner + (ongeverifieerde, geblokkeerde) urenexport-status |
+### Beheerder — volledig of scoped (`/admin/*`, guard per pagina: `requireAdminScope`)
+Elk van deze 8 onderdelen is los toe te wijzen (`AdminScope`-enum, zie §6). Volledige
+beheerders (`role: ADMIN`) zien en mogen ze allemaal; wie geen volledige beheerder is, ziet
+alleen de tabbladen waarvoor `adminScopes` iets bevat.
+
+| Pagina | Onderdeel (`AdminScope`) | Doel |
+|---|---|---|
+| `/admin/rapportages` | `RAPPORTAGES` | 4 grafieken (uren, bezetting, maaltijden, afval) met periodekeuze |
+| `/admin/projects` | `PROJECTS` | Projecten aanmaken/(de)activeren, doorzoekbare lijst |
+| `/admin/ships` | `SHIPS` | Schepen aanmaken/(de)activeren, incl. capaciteit |
+| `/admin/users` → `/admin/users/[id]` | `USERS` | Medewerkers aanmaken (**volledige beheerders only**); per medewerker: projectgroep, specifieke project-/scheepstoewijzing (doorzoekbaar), zichtbare onderdelen, vast project, Shiftbase-ID, admin-scopes (**volledige beheerders only**), 2FA resetten (**volledige beheerders only**) |
+| `/admin/rentman` | `RENTMAN` | Rentman-syncstatus, handmatige sync-trigger, lijst laatst-gesyncte projecten |
+| `/admin/rentman-financieel` | `RENTMAN_FINANCIEEL` | Financieel dashboard, zie §10.5 |
+| `/admin/afas` | `AFAS` | AFAS-syncstatus (pending/synced/error-tellingen + foutmeldingen) |
+| `/admin/shiftbase` | `SHIFTBASE` | Vaarbemanning-import (River Roots, werkend) + read-only API-verkenner + (ongeverifieerde, geblokkeerde) urenexport-status |
 
 ---
 
@@ -297,8 +392,10 @@ beheerder (`User.canLogOccupancy/Meals/Waste`).
   Optie, Aanvraag, Geannuleerd, Retour, ...) blijven `active: false` maar staan wél in de
   database (zichtbaar voor beheerders, niet kiesbaar voor medewerkers).
 - **Administratie-routing (02 Events / 21 Evento):** puur op naam — begint de projectnaam met
-  `"EVENTO - "`, dan Evento, anders Events. Zie `EVENTO_PREFIX` in `lib/assignments.ts` en de
-  vergelijkbare comment in `lib/rentman/sync.ts`.
+  `"EVENTO - "`, dan Evento, anders Events. Zie `EVENTO_PREFIX` in `lib/rentman/sync.ts`. Sinds
+  24 aug 2026 is dit **losgekoppeld** van de gebruikers-zichtbaarheidskeuze
+  (`User.projectGroup`, nu `EVENTS_EVENTO`/`RIVER_ROOTS`, gebaseerd op Shiftbase-herkomst i.p.v.
+  naam) — deze Events/Evento-routing blijft puur een interne AFAS-administratieregel.
 - **Twee live-getroffen bugs (opgelost, zie git-historie voor context):**
   1. Paginering brak omdat `next_page_url` in de praktijk soms volledig ontbreekt i.p.v.
      `null` — nu gebaseerd op `data.length < limit`.
@@ -701,6 +798,9 @@ Gesorteerd op vermoedelijke prioriteit voor de klant:
    "Doorlopend"-categorie (contracten) en de creditnota-uitsluiting uit het referentiedashboard
    waren daar een eenmalige handmatige analyse die niet uit de huidige Rentman-velden is af te
    leiden. Zie §10.5 voor de exacte regels en de reden waarom dit bewust niet nagebouwd is.
+10. **2FA: geen rate-limiting op foutieve codes, geen back-up codes** — bewust buiten scope
+    gehouden bij het bouwen (24 aug 2026); een volledige beheerder kan altijd via "2FA resetten"
+    (`/admin/users/[id]`) iemand die zijn telefoon kwijt is weer toegang geven. Zie §6.
 
 ---
 

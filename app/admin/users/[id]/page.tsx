@@ -1,12 +1,26 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { requireAdminScope } from "@/lib/dal";
 import { Card, CheckboxGroup, Select, Input, Field, Button } from "@/components/ui";
 import { SearchableCheckboxGroup } from "@/components/searchable-checkbox-group";
 import { DefaultProjectPicker } from "@/components/admin/default-project-picker";
-import { updateUserAssignments } from "@/lib/actions/admin";
+import { updateUserAssignments, resetUserTotp } from "@/lib/actions/admin";
+import type { AdminScope } from "@prisma/client";
+
+const ADMIN_SCOPE_OPTIONS: { value: AdminScope; label: string }[] = [
+  { value: "PROJECTS", label: "Projecten" },
+  { value: "SHIPS", label: "Schepen" },
+  { value: "USERS", label: "Medewerkers" },
+  { value: "RENTMAN", label: "Rentman" },
+  { value: "RENTMAN_FINANCIEEL", label: "Rentman financieel" },
+  { value: "SHIFTBASE", label: "Shiftbase" },
+  { value: "AFAS", label: "AFAS-koppeling" },
+  { value: "RAPPORTAGES", label: "Rapportages" },
+];
 
 export default async function UserAssignmentsPage({ params }: { params: Promise<{ id: string }> }) {
+  const currentUser = await requireAdminScope("USERS");
   const { id } = await params;
 
   const [user, projects, ships] = await Promise.all([
@@ -47,14 +61,12 @@ export default async function UserAssignmentsPage({ params }: { params: Promise<
           <div>
             <h2 className="mb-2 text-sm font-medium text-slate-700">Projectgroep</h2>
             <p className="mb-3 text-xs text-slate-500">
-              Beperkt welke projecten deze medewerker standaard ziet bij urenregistratie (op basis van
-              projectnaam: begint met &quot;EVENTO - &quot; = Evento, anders Events). Geldt alleen zolang er
-              hieronder geen specifieke projecten zijn aangevinkt.
+              Beperkt welke projecten (en schepen) deze medewerker standaard ziet bij urenregistratie.
+              Geldt alleen zolang er hieronder geen specifieke projecten zijn aangevinkt.
             </p>
             <Select name="projectGroup" defaultValue={user.projectGroup}>
-              <option value="ALL">Alle projecten (geen beperking)</option>
-              <option value="EVENTS">Alleen Events (administratie 02)</option>
-              <option value="EVENTO">Alleen Evento (administratie 21)</option>
+              <option value="EVENTS_EVENTO">Events &amp; Evento (Rentman-projecten)</option>
+              <option value="RIVER_ROOTS">River Roots (vaarbemanning)</option>
             </Select>
           </div>
 
@@ -153,9 +165,52 @@ export default async function UserAssignmentsPage({ params }: { params: Promise<
             </Field>
           </div>
 
+          {currentUser.role === "ADMIN" && (
+            <div className="border-t border-slate-200 pt-6">
+              <h2 className="mb-2 text-sm font-medium text-slate-700">Scoped beheerder-onderdelen</h2>
+              <p className="mb-3 text-xs text-slate-500">
+                Welke admin-onderdelen mag deze medewerker beheren zonder volledig beheerder te zijn?
+                &quot;Rapportages&quot; is ook te gebruiken om een gewone medewerker alleen inzage in
+                rapportages te geven. Alleen volledige beheerders kunnen dit hier wijzigen.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {ADMIN_SCOPE_OPTIONS.map((opt) => (
+                  <label key={opt.value} className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      name="adminScopes"
+                      value={opt.value}
+                      defaultChecked={user.adminScopes.includes(opt.value)}
+                      className="h-4 w-4 rounded border-slate-300 text-red-700 focus:ring-red-600"
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <Button type="submit">Instellingen opslaan</Button>
         </form>
       </Card>
+
+      {currentUser.role === "ADMIN" && (
+        <Card>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">2-staps-verificatie</h2>
+          <p className="mb-3 text-xs text-slate-500">
+            {user.totpEnabled
+              ? "Deze medewerker heeft 2FA ingesteld."
+              : "Deze medewerker heeft nog geen 2FA ingesteld (wordt bij de volgende login afgedwongen)."}{" "}
+            Gebruik onderstaande knop als iemand zijn telefoon kwijt is -- bij de volgende login moet de
+            medewerker 2FA opnieuw instellen.
+          </p>
+          <form action={resetUserTotp.bind(null, user.id)}>
+            <Button type="submit" variant="secondary" disabled={!user.totpEnabled}>
+              2FA resetten
+            </Button>
+          </form>
+        </Card>
+      )}
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { isRentmanConfigured } from "@/lib/rentman/client";
 import { getRentmanSyncState } from "@/lib/rentman/sync";
+import { requireAdminScope } from "@/lib/dal";
 import { Card } from "@/components/ui";
 import { RentmanControls } from "@/components/admin/rentman-controls";
 
 export default async function AdminRentmanPage() {
+  await requireAdminScope("RENTMAN");
   const configured = isRentmanConfigured();
 
   const [syncState, projects] = await Promise.all([

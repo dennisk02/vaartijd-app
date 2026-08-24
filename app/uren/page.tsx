@@ -14,7 +14,7 @@ export default async function UrenPage() {
 
   const [projects, ships, entries, activeTimer] = await Promise.all([
     getProjectOptionsForUser(user.id, user.projectGroup),
-    getShipOptionsForUser(user.id),
+    getShipOptionsForUser(user.id, user.projectGroup),
     prisma.timeEntry.findMany({
       where: { userId: user.id },
       include: { project: true, ship: true },
