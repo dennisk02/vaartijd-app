@@ -9,6 +9,7 @@ const tabs = [
   { href: "/admin/ships", label: "Schepen" },
   { href: "/admin/users", label: "Medewerkers" },
   { href: "/admin/rentman", label: "Rentman" },
+  { href: "/admin/rentman-financieel", label: "Rentman financieel" },
   { href: "/admin/afas", label: "AFAS-koppeling" },
   { href: "/admin/shiftbase", label: "Shiftbase" },
 ];

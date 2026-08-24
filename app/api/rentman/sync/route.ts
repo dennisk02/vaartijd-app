@@ -1,5 +1,6 @@
 import { getSessionPayload } from "@/lib/session";
 import { syncRentmanProjects } from "@/lib/rentman/sync";
+import { syncRentmanDashboard } from "@/lib/rentman/dashboardSync";
 import { RentmanApiError } from "@/lib/rentman/client";
 
 async function isAuthorized(request: Request) {
@@ -22,13 +23,27 @@ async function handleSync(request: Request) {
     return new Response(null, { status: 401 });
   }
 
+  let projectResult: { processed: number; lastModified: string | null } | { error: string };
   try {
     const result = await syncRentmanProjects();
-    return Response.json({ processed: result.count, lastModified: result.lastModified });
+    projectResult = { processed: result.count, lastModified: result.lastModified };
   } catch (error) {
     const message = error instanceof RentmanApiError ? error.message : "Onbekende fout bij Rentman-sync.";
-    return Response.json({ error: message }, { status: 502 });
+    projectResult = { error: message };
   }
+
+  // Los geprobeerd (en los gerapporteerd) van de projectsync hierboven --
+  // een fout in de dashboardberekening mag de (belangrijkere) projectsync
+  // niet laten falen, en andersom.
+  let dashboardResult: Record<string, unknown> | { error: string };
+  try {
+    dashboardResult = await syncRentmanDashboard();
+  } catch (error) {
+    const message = error instanceof RentmanApiError ? error.message : "Onbekende fout bij Rentman-dashboardsync.";
+    dashboardResult = { error: message };
+  }
+
+  return Response.json({ project: projectResult, dashboard: dashboardResult });
 }
 
 export async function GET(request: Request) {

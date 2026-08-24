@@ -27,7 +27,9 @@ en waarmee beheerders:
 - per medewerker instellen welke onderdelen zichtbaar zijn en of ze een vast project hebben,
 - rapportages bekijken (uren, bezetting, maaltijden, afval — met periodekeuze),
 - de koppelingen met AFAS Profit (uren-export), Rentman (projectimport, read-only) en
-  Shiftbase (vaarbemanning-import + verkenner, read-only) beheren.
+  Shiftbase (vaarbemanning-import + verkenner, read-only) beheren,
+- het financiële Rentman-dashboard bekijken (omzet, facturatie, annuleringen, openstaande
+  opties/aanvragen — draait elke nacht automatisch mee met de Rentman-sync). Zie §10.5.
 
 De twee bedrijfsonderdelen "Events" (administratie 02) en "Evento" (administratie 21) worden
 in de hele app uit elkaar gehouden op basis van een naamconventie: een project dat uit Rentman
@@ -84,10 +86,11 @@ toekomstige AI-coding-assistenten die hier niet automatisch tegenaan lopen.
 ```
 app/                          # App Router — pagina's + API routes
   admin/                      # Beheerscherm (guard: requireAdmin() in app/admin/layout.tsx)
-    afas/ projects/ rapportages/ rentman/ ships/ shiftbase/ users/
+    afas/ projects/ rapportages/ rentman/ rentman-financieel/ ships/ shiftbase/ users/
   api/
     afas/sync/route.ts            # Externe trigger (cron/secret) voor AFAS-export
     rentman/sync/route.ts         # Externe trigger (cron/secret) voor Rentman-import
+                                   # + het financiële dashboard (piggyback, zie §10.5/§14)
     shiftbase/crew-import/route.ts # Externe trigger voor Shiftbase-vaarbemanning-import (lezend, werkend)
     shiftbase/sync/route.ts       # Externe trigger voor Shiftbase-urenexport (schrijvend, nog geblokkeerd)
   uren/ scheepsbezetting/ maaltijden/ afval/ geschiedenis/ dag-indienen/  # Medewerkerschermen
@@ -101,7 +104,8 @@ components/
   searchable-checkbox-group.tsx
   timer-widget.tsx  hours-entry.tsx  time-entry-form.tsx
   ship-occupancy-form.tsx  meal-count-form.tsx  food-waste-form.tsx
-  admin/                      # Beheer-specifieke componenten (forms, project-list, reports/*)
+  admin/                      # Beheer-specifieke componenten (forms, project-list, reports/*,
+                               # rentman-dashboard/* — de 5 tabs van het financiële dashboard)
 
 lib/
   session.ts  dal.ts          # Sessiebeheer (jose/JWT) + Data Access Layer (requireAdmin, getUser)
@@ -113,7 +117,8 @@ lib/
   timer.ts  dates.ts  definitions.ts  i18n.ts
   actions/                    # "use server" — alle mutaties, per domein
   afas/                       # AFAS Profit REST-koppeling (client + hoursSync)
-  rentman/                    # Rentman REST-koppeling (client + sync)
+  rentman/                    # Rentman REST-koppeling: client.ts + sync.ts (projectimport) +
+                               # dashboardSync.ts (financieel dashboard, zie §10.5)
   shiftbase/                  # Shiftbase-koppeling: client.ts (verkenner) + sync.ts
                                # (vaarbemanning-import, lezend, werkend) + hoursSync.ts
                                # (urenexport, schrijvend, nog geblokkeerd/ongeverifieerd)
@@ -162,6 +167,12 @@ Volledige bron: [`prisma/schema.prisma`](prisma/schema.prisma). Kernpunten per m
   `lib/day-submission.ts`, aangeroepen aan het begin van elke create-server-action).
 - **`SyncState`** — generieke key/value-tabel; nu gebruikt voor het laatste Rentman
   `modified`-watermark (incrementele sync).
+- **`RentmanMonthlySnapshot`** / **`RentmanInvoicedMonthly`** / **`RentmanPendingProject`** /
+  **`RentmanManualMonthlyEntry`** — vooraf-berekende data voor het financiële Rentman-dashboard
+  (§10.5). De eerste drie zijn puur afgeleid uit Rentman en worden elke run **volledig
+  herberekend** (upsert + opschoning van rijen buiten de huidige jaarscope — geen incrementele
+  sync); de laatste (`RentmanManualMonthlyEntry`) is de enige met écht handmatig ingevoerde data
+  (uniek per `(month, location)`), bedoeld voor het Maandoverleg-scherm.
 
 **Indexen:** naast de voor de hand liggende unieke constraints staan er `@@index`'en op
 `TimeEntry(userId, date)`, `TimeEntry(afasSyncStatus)`, `TimeEntry(shiftbaseSyncStatus)` en op
@@ -421,6 +432,49 @@ hierboven), en zodra AFAS een betaling registreert, die betaalstatus terugzetten
    `invoices.create_payments` in Rentman.
 5. Cron-route + admin-dashboardpagina, zelfde stijl als `/admin/rentman`.
 
+### 10.5 Rentman financieel dashboard (`/admin/rentman-financieel`) — **werkend**
+
+Herbouw van een door de klant zelf gemaakt statisch HTML-dashboard (aangeleverd als voorbeeld)
+als een echt, elke nacht ververst onderdeel van de app. Alleen lezend richting Rentman, net als
+§10.2 — dit voegt geen nieuwe schrijfrichting toe.
+
+- Module: `lib/rentman/dashboardSync.ts` (`syncRentmanDashboard()`), gebruikt twee nieuwe
+  fetch-functies in `lib/rentman/client.ts`: `fetchAllSubprojectsFinancial(year)` en
+  `fetchAllInvoicesForDashboard(year)`.
+- **Jaarscope (belangrijk, live ontdekte bug — 24 aug 2026 opgelost):** beide fetch-functies
+  filteren op `year` (`created[gte]`/`created[lt]` resp. `date[gte]`/`date[lt]`, top-level
+  queryparams — zelfde patroon als `modified[gte]` in §10.2). **Zonder** deze filter haalt
+  Rentman de **volledige historie** op (destijds 1446 subprojecten sinds juli 2023 i.p.v. de
+  verwachte ~800 voor het lopende jaar), wat de KPI's opblies en tot onzinnige
+  facturatiepercentages (tot 400%) leidde door prijscorrecties op allang afgesloten oude
+  projecten. `syncRentmanDashboard()` geeft `new Date().getUTCFullYear()` door aan beide
+  functies. **Bijbehorende opschoning:** omdat elke run de volledige jaarscope opnieuw berekent
+  (geen incrementele sync), worden `RentmanMonthlySnapshot`- en `RentmanInvoicedMonthly`-rijen
+  voor maanden **buiten** de verse resultaatset expliciet verwijderd na elke sync (`deleteMany`
+  met `notIn`, alleen als de fetch daadwerkelijk resultaten opleverde) — anders blijven oude
+  maanden (bv. uit vóór deze jaarfilter bestond) voor altijd in de grafieken staan. Zelfde
+  veiligheidspatroon als de bestaande opschoning van `RentmanPendingProject`.
+- **`number` zit op het Project, niet op het Subproject** (zelfde valkuil als §10.2) — daarom
+  `expand: "project,status"` en toegang via `sp.project?.number`.
+- **Statusregel Opvolging-tab (afgesproken met de klant):** alleen subprojecten met status
+  `Optie` of `Aanvraag` tellen mee — bewust **geen** extra datum-/urgentielogica. De
+  oorspronkelijke mockup had losse "In optie" en "Aanvraag"-tabbladen; die zijn hier
+  samengevoegd tot één "Opvolging (optie & aanvraag)"-tab, gesorteerd op omzet.
+- **Maandoverleg-tab:** toont de Rentman-cijfers (gefactureerd per factuurdatum, cumulatief) én
+  een handmatig invoerscherm per `(maand, locatie)` — deze reconciliatiecijfers (bezorgen vs.
+  afhalen, nieuwe aanvragen/optie/bevestigd/geannuleerd-tellingen) komen niet (volledig) uit
+  Rentman en worden bewust apart opgeslagen in `RentmanManualMonthlyEntry`, niet berekend.
+- **Detailniveau bewust beperkt tot maandtotalen** (afgesproken met de klant) — geen
+  per-project financiële regels in het dashboard zelf; wie dat wil kan naar `/admin/rentman`
+  (§10.2) of Rentman zelf.
+- Trigger: "Nu herberekenen" op `/admin/rentman-financieel`, of automatisch 's nachts —
+  piggybackt op de bestaande Rentman-cron (`app/api/rentman/sync/route.ts` roept na
+  `syncRentmanProjects()` ook `syncRentmanDashboard()` aan, onafhankelijk try/catch zodat een
+  fout in de een de ander niet blokkeert). Bewust **geen eigen cron-job** — zie de
+  Vercel Hobby-cronlimiet in §14.
+- Geen nieuwe env vars nodig — hergebruikt `RENTMAN_API_TOKEN` (en `CRON_SECRET`/
+  `RENTMAN_SYNC_SECRET` voor de externe trigger) uit §10.2.
+
 ---
 
 ## 11. Environment variables
@@ -529,6 +583,12 @@ Vercel Hobby-plan: **max. 1 cron-run per dag per job**. Elke nieuwe cron-route d
 (bv. voor de AFAS-facturen-sync uit §10.4) moet daar rekening mee houden, of vereist een
 upgrade naar een betaald Vercel-plan voor vaker draaien.
 
+Het financiële Rentman-dashboard (§10.5) heeft **bewust geen eigen cron-job** gekregen — die
+zou de Hobby-limiet overschrijden. In plaats daarvan roept `/api/rentman/sync` na de bestaande
+`syncRentmanProjects()` ook `syncRentmanDashboard()` aan (los try/catch, gecombineerde
+JSON-respons `{ project, dashboard }`), zodat beide 's nachts meeliften op dezelfde 03:00 UTC
+cron-run.
+
 ---
 
 ## 15. Secret-handling conventie
@@ -596,6 +656,12 @@ Gesorteerd op vermoedelijke prioriteit voor de klant:
    maar goed om te weten voor wie hier niet bij was).
 8. **Rapportagepagina's en admin-schermen zijn Nederlandstalig** — vertaling is nooit
    meegenomen (bewuste keuze, niet vergeten of kapot).
+9. **Financieel dashboard: samenvoeging "In optie"/"Aanvraag" tot één Opvolging-tab** — de
+   oorspronkelijke door de klant aangeleverde mockup had deze als twee losse tabbladen; hier
+   samengevoegd tot één (zie §10.5). Dit is een eigen ontwerpkeuze tijdens de bouw, niet
+   letterlijk expliciet zo gevraagd — de klant heeft wel bevestigd dát Optie/Aanvraag samen de
+   inclusieregel zijn, maar de tab-samenvoeging zelf is nooit apart voorgelegd. Goed om nog
+   eens te checken bij de klant of dit zo gewenst blijft.
 
 ---
 
