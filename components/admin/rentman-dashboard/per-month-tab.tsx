@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { ChartTooltip } from "@/components/admin/reports/chart-tooltip";
 import { dash, statusColor } from "./colors";
+import { ChartCard } from "./kpi-card";
 import { formatDate, formatEuro, formatMonthLabel } from "./format";
 import type { Subproject } from "@/lib/rentman/dashboardAggregate";
-import { monthDetail } from "@/lib/rentman/dashboardAggregate";
+import { monthDetail, statusByMonth } from "@/lib/rentman/dashboardAggregate";
 
 export function PerMonthTab({ subs, months }: { subs: Subproject[]; months: string[] }) {
   const [active, setActive] = useState(months[0] ?? "");
@@ -14,8 +16,35 @@ export function PerMonthTab({ subs, months }: { subs: Subproject[]; months: stri
   }
   const detail = monthDetail(subs, active || months[0]);
 
+  const stacked = statusByMonth(subs);
+  const stackedChartData = stacked.months.map((month, i) => {
+    const row: Record<string, string | number> = { month: formatMonthLabel(month) };
+    for (const s of stacked.series) row[s.status] = s.data[i];
+    return row;
+  });
+
   return (
-    <div className="rounded-[10px] bg-white p-4" style={{ boxShadow: "0 1px 4px rgba(0,0,0,.08)" }}>
+    <div className="flex flex-col gap-3.5">
+      <ChartCard title="Omzet per status per maand" sub="Alle maanden in één oogopslag · gestapeld · excl. BTW">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={stackedChartData}>
+            <CartesianGrid vertical={false} stroke="#F3F4F6" />
+            <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
+            <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
+            <Tooltip
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => formatEuro(v)} />}
+              cursor={{ fill: "#F3F4F6" }}
+            />
+            <Legend wrapperStyle={{ fontSize: 10 }} />
+            {stacked.series.map((s) => (
+              <Bar key={s.status} dataKey={s.status} stackId="a" fill={statusColor(s.status)} radius={[2, 2, 0, 0]} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      <div className="rounded-[10px] bg-white p-4" style={{ boxShadow: "0 1px 4px rgba(0,0,0,.08)" }}>
       <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.heading }}>
         Projecten per maand — omzet en facturatie per status
       </h2>
@@ -168,6 +197,7 @@ export function PerMonthTab({ subs, months }: { subs: Subproject[]; months: stri
             );
           })}
         </div>
+      </div>
       </div>
     </div>
   );

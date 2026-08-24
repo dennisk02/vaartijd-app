@@ -80,7 +80,6 @@ model User {
   activeTimer        ActiveTimer?
   assignedProjects   Project[]       @relation("UserProjects")
   assignedShips      Ship[]          @relation("UserShips")
-  rentmanManualEntries RentmanManualMonthlyEntry[]
 }
 
 model Project {
@@ -302,24 +301,3 @@ model RentmanInvoicedMonthly {
   computedAt    DateTime @updatedAt
 }
 
-/// Handmatig ingevulde maandcijfers per locatie (bv. "M&R Kampen"), ter
-/// vergelijking met de automatisch berekende Rentman-cijfers hierboven --
-/// deze data bestaat niet (volledig) in Rentman zelf.
-model RentmanManualMonthlyEntry {
-  id              String   @id @default(cuid())
-  month           String
-  location        String
-  revenueTotal    Decimal? @db.Decimal(12, 2)
-  deliveryRevenue Decimal? @db.Decimal(12, 2)
-  pickupRevenue   Decimal? @db.Decimal(12, 2)
-  newRequests     Int?
-  inOption        Int?
-  confirmed       Int?
-  cancelled       Int?
-  note            String?
-  updatedById     String?
-  updatedBy       User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt       DateTime @updatedAt
-
-  @@unique([month, location])
-}

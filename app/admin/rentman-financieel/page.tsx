@@ -15,10 +15,9 @@ import type { Subproject } from "@/lib/rentman/dashboardAggregate";
 export default async function RentmanFinancieelPage() {
   const configured = isRentmanConfigured();
 
-  const [snapshotRows, invoicedMonthly, manualEntries] = await Promise.all([
+  const [snapshotRows, invoicedMonthly] = await Promise.all([
     prisma.rentmanSubprojectSnapshot.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.rentmanInvoicedMonthly.findMany({ orderBy: { month: "asc" } }),
-    prisma.rentmanManualMonthlyEntry.findMany({ orderBy: [{ month: "desc" }, { location: "asc" }] }),
   ]);
 
   const subs: Subproject[] = snapshotRows.map((r) => ({
@@ -86,20 +85,6 @@ export default async function RentmanFinancieelPage() {
                 content: (
                   <MaandoverlegTab
                     invoicedMonthly={invoicedMonthly.map((r) => ({ month: r.month, invoicedExclVat: Number(r.invoicedExclVat) }))}
-                    manualEntries={manualEntries.map((e) => ({
-                      id: e.id,
-                      month: e.month,
-                      location: e.location,
-                      revenueTotal: e.revenueTotal != null ? Number(e.revenueTotal) : null,
-                      deliveryRevenue: e.deliveryRevenue != null ? Number(e.deliveryRevenue) : null,
-                      pickupRevenue: e.pickupRevenue != null ? Number(e.pickupRevenue) : null,
-                      newRequests: e.newRequests,
-                      inOption: e.inOption,
-                      confirmed: e.confirmed,
-                      cancelled: e.cancelled,
-                      note: e.note,
-                    }))}
-                    months={months}
                   />
                 ),
               },
