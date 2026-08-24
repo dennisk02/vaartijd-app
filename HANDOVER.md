@@ -176,8 +176,6 @@ Volledige bron: [`prisma/schema.prisma`](prisma/schema.prisma). Kernpunten per m
   (`lib/rentman/dashboardAggregate.ts`) i.p.v. los vooraf-geaggregeerd te worden.
 - **`RentmanInvoicedMonthly`** — apart van `RentmanSubprojectSnapshot` omdat dit op
   **factuurdatum** groepeert i.p.v. aanmaakdatum (voor het Maandoverleg-scherm/AFAS-aansluiting).
-- **`RentmanManualMonthlyEntry`** — de enige met écht handmatig ingevoerde data (uniek per
-  `(month, location)`), bedoeld voor het Maandoverleg-scherm.
 
 **Indexen:** naast de voor de hand liggende unieke constraints staan er `@@index`'en op
 `TimeEntry(userId, date)`, `TimeEntry(afasSyncStatus)`, `TimeEntry(shiftbaseSyncStatus)` en op
@@ -453,8 +451,7 @@ scope worden verwijderd). Alle KPI's/grafieken/tabellen van de 6 tabbladen worde
 — bij ~800 rijen is dat in-memory triviaal snel, en het voorkomt dat elke nieuwe doorsnede een
 eigen precomputed tabel nodig heeft (eerdere opzet met `RentmanMonthlySnapshot`+`RentmanPendingProject`
 is hierom vervangen, migratie `20260824065117_rentman_subproject_snapshot`). `RentmanInvoicedMonthly`
-(factuurdatum-groepering, voor Maandoverleg) en `RentmanManualMonthlyEntry` (handmatige cijfers)
-blijven wel losse tabellen.
+(factuurdatum-groepering, voor Maandoverleg) blijft wel een losse tabel.
 
 - Module: `lib/rentman/dashboardSync.ts` (`syncRentmanDashboard()`), gebruikt twee fetch-functies
   in `lib/rentman/client.ts`: `fetchAllSubprojectsFinancial(year)` en `fetchAllInvoicesForDashboard(year)`.
@@ -483,15 +480,18 @@ blijven wel losse tabellen.
   "In optie & aanvraag" ten onrechte samen tot 1 tab — dat zijn twee verschillende dingen):
   1. **Omzet & Facturatie** — 5 KPI's, 4 grafieken (omzet vs. gefactureerd, facturatiegraad,
      omzet per status per maand gestapeld, open omzet per status als donut).
-  2. **Projecten per maand** — maandkiezer; per maand 2 KPI's, een statuslijst met
-     voortgangsbalken, een donut, en per status een kleurkoptabel met individuele projecten
-     (#, Project, Periode, Omzet, Gefact., Open, %).
+  2. **Projecten per maand** — opent met een grafiek die alle maanden in één oogopslag toont
+     (omzet per status, gestapeld, dezelfde `statusByMonth()`-aggregatie als tabblad 1); daaronder
+     een maandkiezer met per maand 2 KPI's, een statuslijst met voortgangsbalken, een donut, en
+     per status een kleurkoptabel met individuele projecten (#, Project, Periode, Omzet, Gefact.,
+     Open, %).
   3. **Geannuleerd** — 4 KPI's (incl. gederfde omzet, grootste annulering), 2 grafieken,
      maandkiezer met tabel van geannuleerde projecten gesorteerd op offertebedrag.
-  4. **Maandoverleg** — 2 grafieken (gefactureerd per factuurdatum; EVENTO-aanvragen per maand
-     uit de handmatige cijfers), de bestaande factuurdatum-tabel, per-maand pivot-tabellen
-     (indicator × locatie, opgebouwd uit `RentmanManualMonthlyEntry`) en het handmatige
-     invoerscherm.
+  4. **Maandoverleg** — gefactureerd-per-factuurdatum-grafiek + de bestaande factuurdatum-tabel.
+     De handmatige-invoersectie (per-locatie cijfers EVENTO/M&R Kampen/M&R Utrecht, model
+     `RentmanManualMonthlyEntry`) is op verzoek van de klant weer volledig verwijderd
+     (24 aug 2026, migratie `20260824085516_drop_rentman_manual_entry`) — dit tabblad toont nu
+     alleen nog Rentman-afgeleide factuurdatumcijfers.
   5. **Opvolging** — niet-gefactureerde projecten per maand, best-effort geclassificeerd als
      ⚠ Aandacht (periode al voorbij) of 📅 Toekomstig (periode nog in de toekomst). **Let op:**
      de "Doorlopend"-categorie (contracten) en de creditnota-uitsluiting uit het
