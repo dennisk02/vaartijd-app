@@ -24,8 +24,8 @@ export function FollowUpTab({ subs }: { subs: Subproject[] }) {
   return (
     <div className="flex flex-col gap-3.5">
       <KpiGrid>
-        <KpiCard label="Direct opvolgen" value={`${kpi.directCount} proj.`} accent={dash.redDark} valueColor={dash.redDark} sub={`${formatEuro(kpi.directRevenue)} open omzet`} tint={dash.redSoft} />
-        <KpiCard label="Niet-gefactureerd" value={`${list.length} proj.`} accent={dash.gray} sub="Alle openstaande projecten" />
+        <KpiCard label="Direct opvolgen" value={`${kpi.directCount} proj.`} valueColor={dash.red} sub={`${formatEuro(kpi.directRevenue)} open omzet`} tint={dash.redSoft} />
+        <KpiCard label="Niet-gefactureerd" value={`${list.length} proj.`} sub="Alle openstaande projecten" />
       </KpiGrid>
 
       <Callout tone="info">
@@ -35,8 +35,8 @@ export function FollowUpTab({ subs }: { subs: Subproject[] }) {
         huidige Rentman-velden niet betrouwbaar automatisch te bepalen.
       </Callout>
 
-      <div className="rounded-[10px] bg-white p-4" style={{ boxShadow: "0 1px 4px rgba(0,0,0,.08)" }}>
-        <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.heading }}>
+      <div className="rounded-[10px] border p-4" style={{ background: dash.panel, borderColor: dash.border }}>
+        <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.text }}>
           Niet-gefactureerde projecten per maand
         </h2>
         <p className="mb-3 text-[11px]" style={{ color: dash.mutedLight }}>
@@ -46,7 +46,7 @@ export function FollowUpTab({ subs }: { subs: Subproject[] }) {
         <div className="flex flex-col gap-4">
           {months.map((month) => (
             <div key={month}>
-              <div className="mb-1.5 text-xs font-bold" style={{ color: "#374151" }}>
+              <div className="mb-1.5 text-xs font-bold" style={{ color: dash.text }}>
                 {formatMonthLabel(month)}
               </div>
               <div className="overflow-x-auto">
@@ -54,7 +54,7 @@ export function FollowUpTab({ subs }: { subs: Subproject[] }) {
                   <thead>
                     <tr>
                       {["", "#", "Project", "Status", "Periode tot", "Open omzet"].map((h, i) => (
-                        <th key={i} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase" style={{ background: "#F9FAFB", color: dash.muted, textAlign: i === 5 ? "right" : "left" }}>
+                        <th key={i} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase" style={{ background: dash.panel2, color: dash.muted, textAlign: i === 5 ? "right" : "left" }}>
                           {h}
                         </th>
                       ))}
@@ -62,17 +62,17 @@ export function FollowUpTab({ subs }: { subs: Subproject[] }) {
                   </thead>
                   <tbody>
                     {(byMonth.get(month) ?? []).map((p) => (
-                      <tr key={p.id} className="border-t" style={{ borderColor: "#F3F4F6" }}>
+                      <tr key={p.id} className="border-t" style={{ borderColor: dash.border }}>
                         <td className="px-2.5 py-1.5">
                           {p.flag === "aandacht" ? "⚠" : p.flag === "toekomstig" ? "📅" : ""}
                         </td>
                         <td className="px-2.5 py-1.5" style={{ color: dash.mutedLight }}>{p.projectNumber ?? "-"}</td>
-                        <td className="px-2.5 py-1.5">{p.name}</td>
+                        <td className="px-2.5 py-1.5" style={{ color: dash.text }}>{p.name}</td>
                         <td className="px-2.5 py-1.5" style={{ color: dash.muted }}>{p.status}</td>
-                        <td className="px-2.5 py-1.5 font-semibold" style={{ color: p.flag === "aandacht" ? dash.redDark : dash.muted }}>
+                        <td className="px-2.5 py-1.5 font-semibold" style={{ color: p.flag === "aandacht" ? dash.red : dash.muted }}>
                           {formatDate(p.planperiodEnd)}
                         </td>
-                        <td className="px-2.5 py-1.5 text-right font-semibold" style={{ color: dash.redDark }}>{formatEuro(p.open)}</td>
+                        <td className="px-2.5 py-1.5 text-right font-semibold" style={{ color: dash.red }}>{formatEuro(p.open)}</td>
                       </tr>
                     ))}
                   </tbody>

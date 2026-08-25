@@ -1,7 +1,7 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChartTooltip } from "@/components/admin/reports/chart-tooltip";
+import { ChartTooltip } from "./chart-tooltip";
 import { dash, statusColor } from "./colors";
 import { KpiCard, KpiGrid, Callout, ChartCard } from "./kpi-card";
 import { formatEuro, formatMonthLabel } from "./format";
@@ -25,28 +25,28 @@ export function OverviewTab({ subs }: { subs: Subproject[] }) {
   return (
     <div className="flex flex-col gap-3.5">
       <KpiGrid>
-        <KpiCard label="Projecten" value={String(kpi.totalProjects)} accent={dash.blue} sub={`${months.length} maanden`} />
-        <KpiCard label="Totale projectomzet" value={formatEuro(kpi.totalRevenue)} accent={dash.green} sub="Excl. BTW" />
-        <KpiCard label="Al gefactureerd" value={formatEuro(kpi.totalInvoiced)} accent={dash.green} sub={`${kpi.invoicedPct}% · excl. BTW`} />
-        <KpiCard label="Omzet in optie" value={formatEuro(kpi.optieRevenue)} accent="#3B82F6" valueColor="#3B82F6" sub="Nog te bevestigen" />
-        <KpiCard label="Gederfde omzet" value={formatEuro(kpi.cancelledRevenue)} accent={dash.red} valueColor={dash.red} sub={`${kpi.cancelledCount} geannuleerd`} />
+        <KpiCard label="Projecten" value={String(kpi.totalProjects)} sub={`${months.length} maanden`} />
+        <KpiCard label="Totale projectomzet" value={formatEuro(kpi.totalRevenue)} sub="Excl. BTW" />
+        <KpiCard label="Al gefactureerd" value={formatEuro(kpi.totalInvoiced)} valueColor={dash.green} sub={`${kpi.invoicedPct}% · excl. BTW`} />
+        <KpiCard label="Omzet in optie" value={formatEuro(kpi.optieRevenue)} valueColor={dash.blue} sub="Nog te bevestigen" />
+        <KpiCard label="Gederfde omzet" value={formatEuro(kpi.cancelledRevenue)} valueColor={dash.red} sub={`${kpi.cancelledCount} geannuleerd`} />
       </KpiGrid>
 
       <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-[2fr_1fr]">
         <ChartCard title="Projectomzet vs. gefactureerd" sub="Per aanmaakmaand · Excl. BTW">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={revenueChartData}>
-              <CartesianGrid vertical={false} stroke="#F3F4F6" />
-              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
+              <CartesianGrid vertical={false} stroke={dash.border} />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={{ stroke: dash.border }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
               <Tooltip
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => formatEuro(v)} />}
-                cursor={{ fill: "#F3F4F6" }}
+                cursor={{ fill: dash.panel2 }}
               />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Projectomzet" fill="rgba(30,64,175,0.15)" stroke={dash.blue} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
-              <Bar dataKey="Gefactureerd" fill="rgba(0,107,72,0.15)" stroke={dash.green} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              <Legend wrapperStyle={{ fontSize: 11, color: dash.mutedLight }} />
+              <Bar dataKey="Projectomzet" fill="rgba(91,141,239,0.18)" stroke={dash.blue} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              <Bar dataKey="Gefactureerd" fill="rgba(62,207,142,0.18)" stroke={dash.green} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -54,17 +54,17 @@ export function OverviewTab({ subs }: { subs: Subproject[] }) {
         <ChartCard title="Facturatiegraad" sub="% gefactureerd per maand">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rateChartData}>
-              <CartesianGrid vertical={false} stroke="#F3F4F6" />
-              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={34} tickFormatter={(v) => `${v}%`} />
+              <CartesianGrid vertical={false} stroke={dash.border} />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={{ stroke: dash.border }} tickLine={false} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={false} tickLine={false} width={34} tickFormatter={(v) => `${v}%`} />
               <Tooltip
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => `${v}%`} />}
-                cursor={{ fill: "#F3F4F6" }}
+                cursor={{ fill: dash.panel2 }}
               />
               <Bar dataKey="pct" name="Facturatiegraad" radius={[6, 6, 0, 0]} maxBarSize={26}>
                 {rateChartData.map((d, i) => (
-                  <Cell key={i} fill={d.pct >= 70 ? dash.green : d.pct >= 50 ? dash.amber : dash.redDark} />
+                  <Cell key={i} fill={d.pct >= 70 ? dash.green : d.pct >= 50 ? dash.orange : dash.red} />
                 ))}
               </Bar>
             </BarChart>
@@ -76,15 +76,15 @@ export function OverviewTab({ subs }: { subs: Subproject[] }) {
         <ChartCard title="Omzet per status per maand" sub="Gestapeld · Excl. BTW">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={stackedChartData}>
-              <CartesianGrid vertical={false} stroke="#F3F4F6" />
-              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
+              <CartesianGrid vertical={false} stroke={dash.border} />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={{ stroke: dash.border }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
               <Tooltip
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => formatEuro(v)} />}
-                cursor={{ fill: "#F3F4F6" }}
+                cursor={{ fill: dash.panel2 }}
               />
-              <Legend wrapperStyle={{ fontSize: 10 }} />
+              <Legend wrapperStyle={{ fontSize: 10, color: dash.mutedLight }} />
               {stacked.series.map((s) => (
                 <Bar key={s.status} dataKey={s.status} stackId="a" fill={statusColor(s.status)} radius={[2, 2, 0, 0]} />
               ))}
@@ -97,12 +97,15 @@ export function OverviewTab({ subs }: { subs: Subproject[] }) {
             <PieChart>
               <Pie data={open} dataKey="value" nameKey="status" innerRadius={45} outerRadius={78} paddingAngle={1}>
                 {open.map((s) => (
-                  <Cell key={s.status} fill={statusColor(s.status)} stroke="#fff" strokeWidth={2} />
+                  <Cell key={s.status} fill={statusColor(s.status)} stroke={dash.panel} strokeWidth={2} />
                 ))}
               </Pie>
-              <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 10 }} />
+              <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 10, color: dash.mutedLight }} />
               <Tooltip
                 formatter={(value, name) => [formatEuro(Number(value ?? 0)), String(name)]}
+                contentStyle={{ background: dash.panel2, borderColor: dash.border, borderRadius: 8 }}
+                labelStyle={{ color: dash.mutedLight }}
+                itemStyle={{ color: dash.text }}
               />
             </PieChart>
           </ResponsiveContainer>

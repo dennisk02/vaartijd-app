@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { isRentmanConfigured } from "@/lib/rentman/client";
 import { requireAdminScope } from "@/lib/dal";
-import { Card } from "@/components/ui";
 import { RentmanDashboardSyncControls } from "@/components/admin/rentman-dashboard/sync-controls";
 import { RentmanDashboardTabs } from "@/components/admin/rentman-dashboard/tabs";
 import { OverviewTab } from "@/components/admin/rentman-dashboard/overview-tab";
@@ -43,15 +42,13 @@ export default async function RentmanFinancieelPage() {
     // Full-bleed t.o.v. de max-w-2xl van app/admin/layout.tsx -- dit dashboard
     // mag (op uitdrukkelijk verzoek van de klant) de volledige paginabreedte
     // gebruiken, i.t.t. de rest van het beheerscherm.
-    <div className="relative left-1/2 w-screen -translate-x-1/2 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-[1700px] flex-col gap-3.5 py-2" style={{ background: dash.bg }}>
+    <div className="relative left-1/2 w-screen -translate-x-1/2 px-4 sm:px-6 lg:px-8" style={{ background: dash.bg }}>
+      <div className="mx-auto flex max-w-[1700px] flex-col gap-3.5 py-4" style={{ background: dash.bg, color: dash.text }}>
         {!configured && (
-          <Card className="border-amber-300 bg-amber-50">
-            <p className="text-sm text-amber-800">
-              Rentman-koppeling is nog niet geconfigureerd. Vul <code>RENTMAN_API_TOKEN</code> in via de
-              omgevingsvariabelen.
-            </p>
-          </Card>
+          <div className="rounded-lg px-4 py-2.5 text-sm" style={{ background: dash.warnBg, borderLeft: `3px solid ${dash.orange}`, color: dash.warnText }}>
+            Rentman-koppeling is nog niet geconfigureerd. Vul <code>RENTMAN_API_TOKEN</code> in via de
+            omgevingsvariabelen.
+          </div>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -71,10 +68,10 @@ export default async function RentmanFinancieelPage() {
         </div>
 
         {subs.length === 0 ? (
-          <Card className="text-sm text-slate-500">
+          <div className="rounded-[10px] border p-4 text-sm" style={{ background: dash.panel, borderColor: dash.border, color: dash.muted }}>
             Nog geen data berekend. Klik op &quot;Nu herberekenen&quot; hierboven om de eerste berekening te
             starten.
-          </Card>
+          </div>
         ) : (
           <RentmanDashboardTabs
             tabs={[

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChartTooltip } from "@/components/admin/reports/chart-tooltip";
+import { ChartTooltip } from "./chart-tooltip";
 import { dash } from "./colors";
 import { KpiCard, KpiGrid, Callout, ChartCard } from "./kpi-card";
 import { formatDate, formatEuro, formatMonthLabel } from "./format";
@@ -20,46 +20,45 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
   return (
     <div className="flex flex-col gap-3.5">
       <KpiGrid>
-        <KpiCard label="Geannuleerd" value={String(kpi.count)} accent={dash.red} valueColor={dash.red} sub="Jan–aug 2026" />
-        <KpiCard label="Gederfde omzet" value={formatEuro(kpi.totalRevenue)} accent={dash.red} valueColor={dash.red} sub="Excl. BTW" />
+        <KpiCard label="Geannuleerd" value={String(kpi.count)} valueColor={dash.red} sub="Jan–aug 2026" />
+        <KpiCard label="Gederfde omzet" value={formatEuro(kpi.totalRevenue)} valueColor={dash.red} sub="Excl. BTW" />
         <KpiCard
           label="Grootste annulering"
           value={kpi.largest ? formatEuro(kpi.largest.cancelledRevenue ?? 0) : "-"}
-          accent={dash.amber}
-          valueColor={dash.amber}
+          valueColor={dash.orange}
           sub={kpi.largest ? `${kpi.largest.projectNumber ?? ""} ${kpi.largest.name}`.trim() : undefined}
         />
-        <KpiCard label="Gem. per annulering" value={formatEuro(kpi.avgPerCancellation)} accent={dash.gray} sub={`${kpi.countWithAmount} met offertebedrag`} />
+        <KpiCard label="Gem. per annulering" value={formatEuro(kpi.avgPerCancellation)} sub={`${kpi.countWithAmount} met offertebedrag`} />
       </KpiGrid>
 
       <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
         <ChartCard title="Gederfde omzet per maand" sub="Excl. BTW">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartRevenue}>
-              <CartesianGrid vertical={false} stroke="#F3F4F6" />
-              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
+              <CartesianGrid vertical={false} stroke={dash.border} />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={{ stroke: dash.border }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => `€${Math.round(v / 1000)}K`} />
               <Tooltip
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => formatEuro(v)} />}
-                cursor={{ fill: "#F3F4F6" }}
+                cursor={{ fill: dash.panel2 }}
               />
-              <Bar dataKey="Gederfde omzet" fill="rgba(239,68,68,0.2)" stroke={dash.red} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              <Bar dataKey="Gederfde omzet" fill="rgba(239,87,87,0.2)" stroke={dash.red} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
         <ChartCard title="Aantal annuleringen per maand" sub="Inclusief projecten zonder offertebedrag">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartCount}>
-              <CartesianGrid vertical={false} stroke="#F3F4F6" />
-              <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={{ stroke: "#E5E7EB" }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
+              <CartesianGrid vertical={false} stroke={dash.border} />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={{ stroke: dash.border }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={false} tickLine={false} width={30} />
               <Tooltip
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => `${v} annuleringen`} />}
-                cursor={{ fill: "#F3F4F6" }}
+                cursor={{ fill: dash.panel2 }}
               />
-              <Bar dataKey="Aantal" fill="rgba(239,68,68,0.15)" stroke={dash.red} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              <Bar dataKey="Aantal" fill="rgba(239,87,87,0.15)" stroke={dash.red} strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={26} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -69,8 +68,8 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
         <b>Annuleringsreden:</b> niet beschikbaar via de Rentman-API — vereist een custom veld in Rentman.
       </Callout>
 
-      <div className="rounded-[10px] bg-white p-4" style={{ boxShadow: "0 1px 4px rgba(0,0,0,.08)" }}>
-        <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.heading }}>
+      <div className="rounded-[10px] border p-4" style={{ background: dash.panel, borderColor: dash.border }}>
+        <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.text }}>
           Geannuleerde projecten per maand
         </h2>
         <p className="mb-3 text-[11px]" style={{ color: dash.mutedLight }}>
@@ -86,7 +85,7 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
               style={
                 (active || months[0]) === m
                   ? { background: dash.blue, borderColor: dash.blue, color: "#fff" }
-                  : { background: "#fff", borderColor: dash.border, color: dash.muted }
+                  : { background: dash.panel2, borderColor: dash.border, color: dash.muted }
               }
             >
               {formatMonthLabel(m)}
@@ -98,7 +97,7 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
             <thead>
               <tr>
                 {["#", "Project", "Periode", "Offertebedrag"].map((h, i) => (
-                  <th key={h} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase" style={{ background: "#F9FAFB", color: dash.muted, textAlign: i >= 3 ? "right" : "left" }}>
+                  <th key={h} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase" style={{ background: dash.panel2, color: dash.muted, textAlign: i >= 3 ? "right" : "left" }}>
                     {h}
                   </th>
                 ))}
@@ -113,9 +112,9 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
                 </tr>
               )}
               {rows.map((r) => (
-                <tr key={r.id} className="border-t" style={{ borderColor: "#F3F4F6" }}>
+                <tr key={r.id} className="border-t" style={{ borderColor: dash.border }}>
                   <td className="px-2.5 py-1.5" style={{ color: dash.mutedLight }}>{r.number ?? "-"}</td>
-                  <td className="px-2.5 py-1.5">{r.name}</td>
+                  <td className="px-2.5 py-1.5" style={{ color: dash.text }}>{r.name}</td>
                   <td className="px-2.5 py-1.5" style={{ color: dash.muted }}>{formatDate(r.period)}</td>
                   <td className="px-2.5 py-1.5 text-right font-semibold" style={{ color: r.revenue > 0 ? dash.red : dash.mutedLight }}>
                     {r.revenue > 0 ? formatEuro(r.revenue) : "-"}

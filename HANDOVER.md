@@ -597,9 +597,20 @@ is hierom vervangen, migratie `20260824065117_rentman_subproject_snapshot`). `Re
      gefabriceerd. Zie `followUpList()` in `dashboardAggregate.ts` voor de exacte regels.
   6. **In optie & aanvraag** — alle projecten met status Optie/Aanvraag, oudste aanmaakdatum
      eerst, rood gemarkeerd wanneer de periode al verlopen is.
-- **Kleuren exact overgenomen** uit het referentiedashboard in `components/admin/rentman-dashboard/colors.ts`
-  (bewust een aparte, pixel-exacte tokenset — niet de generieke `components/admin/reports/palette.ts`).
-  Grafieken met Recharts (het gevestigde patroon in deze app), niet Chart.js zoals het origineel.
+- **Donker thema (25 aug 2026)** — de klant leverde een tweede stijlgids aan
+  (`instructie_dashboardstijl_vaartijden.md`) met een donker kleurenschema (`--bg #0f1115`,
+  panelen `#171a21`/`#1e222b`, 4 semantische kleuren blauw/groen/oranje/rood) en vroeg dit
+  scherm daarnaar om te zetten. `components/admin/rentman-dashboard/colors.ts` is herschreven
+  naar deze donkere tokenset (bewust een aparte, dashboard-specifieke set — niet de generieke
+  `components/admin/reports/palette.ts`, die licht blijft voor de rest van de admin-
+  rapportages). De 9 Rentman-statussen zijn allemaal afgeleid van de 4 basiskleuren in
+  verschillende tinten (zie `STATUS_COLORS`) i.p.v. nieuwe, niet-verwante kleuren te
+  introduceren — zo blijven ze onderscheidbaar in gestapelde/donut-grafieken zonder van de
+  stijlgids af te wijken. De stijlgids schreef ook Chart.js en een losse HTML-bestand-aanpak
+  voor; dat is **niet** overgenomen (bewust, na overleg) — alleen het visuele ontwerp is
+  toegepast, gebouwd met de bestaande Recharts + React-componentstructuur van deze app. Een
+  eigen, donker-thema tooltip-component (`chart-tooltip.tsx`, lokaal in deze map) vervangt de
+  gedeelde lichte `components/admin/reports/chart-tooltip.tsx` binnen dit scherm.
 - **Volledige paginabreedte:** `app/admin/layout.tsx` beperkt alle admin-pagina's tot `max-w-2xl`.
   Dit scherm breekt daar bewust uit via een CSS "full-bleed"-truc
   (`relative left-1/2 w-screen -translate-x-1/2`, gevolgd door een eigen `max-w-[1700px]`) i.p.v.
@@ -676,6 +687,15 @@ npx prisma migrate deploy   # non-interactief, past 'm toe
 demo-medewerkers, -projecten, -schepen en een jaar demodata — **niet draaien tegen de
 productiedatabase** tenzij dat expliciet gewenst is (was tijdens de bouwfase eenmalig gebruikt
 voor visuele verificatie, niet bedoeld als doorlopend proces).
+
+**Opgeschoond (25 aug 2026):** de door `seed-demo.ts` aangemaakte testdata is uit de
+(gedeelde dev/prod-)database verwijderd op verzoek van de klant — 9 demo-medewerkers
+(`@demo.vaartijd.nl`), hun ~23.856 synthetische registraties (uren/bezetting/maaltijden/afval),
+en de 10 demo-schepen/5 demo-projecten die nooit door een echte medewerker gebruikt zijn. Twee
+demo-schepen/projecten (`Alegro`, `Havenwerkzaamheden`) bleken inmiddels wél echte registraties
+te hebben en zijn **niet** verwijderd. `seed-demo.ts` zelf staat nog in de repo (voor gebruik
+tegen een aparte test-omgeving) maar zou bij het opnieuw draaien tegen déze database dezelfde
+demo-medewerkers/-schepen/-projecten weer aanmaken.
 
 ---
 

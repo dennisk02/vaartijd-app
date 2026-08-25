@@ -14,13 +14,12 @@ export function PendingTab({ subs }: { subs: Subproject[] }) {
   return (
     <div className="flex flex-col gap-3.5">
       <KpiGrid>
-        <KpiCard label="In optie" value={String(kpi.optieCount)} accent="#3B82F6" valueColor="#3B82F6" sub={`${formatEuro(kpi.optieRevenue)} projectomzet`} />
-        <KpiCard label="Aanvraag" value={String(kpi.aanvraagCount)} accent="#F59E0B" valueColor={dash.amber} sub={`${formatEuro(kpi.aanvraagRevenue)} projectomzet`} />
-        <KpiCard label="Totale omzet" value={formatEuro(kpi.totalRevenue)} accent={dash.blue} sub="Excl. BTW · Nog te bevestigen" />
+        <KpiCard label="In optie" value={String(kpi.optieCount)} valueColor={dash.blue} sub={`${formatEuro(kpi.optieRevenue)} projectomzet`} />
+        <KpiCard label="Aanvraag" value={String(kpi.aanvraagCount)} valueColor={dash.orange} sub={`${formatEuro(kpi.aanvraagRevenue)} projectomzet`} />
+        <KpiCard label="Totale omzet" value={formatEuro(kpi.totalRevenue)} sub="Excl. BTW · Nog te bevestigen" />
         <KpiCard
           label="Oudste open"
           value={kpi.oldest?.projectNumber ?? "-"}
-          accent={dash.gray}
           sub={kpi.oldest ? `${kpi.oldest.name} — ${formatDate(kpi.oldest.createdAt)}` : undefined}
         />
       </KpiGrid>
@@ -31,10 +30,10 @@ export function PendingTab({ subs }: { subs: Subproject[] }) {
         projectomzet excl. BTW.
       </Callout>
 
-      <div className="rounded-[10px] bg-white p-4" style={{ boxShadow: "0 1px 4px rgba(0,0,0,.08)" }}>
+      <div className="rounded-[10px] border p-4" style={{ background: dash.panel, borderColor: dash.border }}>
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.heading }}>
+            <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.text }}>
               In optie &amp; aanvragen — oudste eerst
             </h2>
             <p className="text-[11px]" style={{ color: dash.mutedLight }}>
@@ -42,10 +41,10 @@ export function PendingTab({ subs }: { subs: Subproject[] }) {
             </p>
           </div>
           <div className="flex gap-1.5">
-            <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#DBEAFE", color: dash.blue }}>
+            <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(91,141,239,0.15)", color: dash.blue }}>
               ■ In optie
             </span>
-            <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
+            <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(245,166,35,0.15)", color: dash.orange }}>
               ■ Aanvraag
             </span>
           </div>
@@ -55,7 +54,7 @@ export function PendingTab({ subs }: { subs: Subproject[] }) {
             <thead>
               <tr>
                 {["#", "Project", "Status", "Periode tot", "Omzet"].map((h, i) => (
-                  <th key={h} className="px-3 py-2 text-[10px] font-semibold uppercase" style={{ background: dash.blue, color: "#fff", textAlign: i === 4 ? "right" : "left" }}>
+                  <th key={h} className="px-3 py-2 text-[10px] font-semibold uppercase" style={{ background: dash.panel2, color: dash.muted, textAlign: i === 4 ? "right" : "left" }}>
                     {h}
                   </th>
                 ))}
@@ -70,21 +69,25 @@ export function PendingTab({ subs }: { subs: Subproject[] }) {
                 </tr>
               )}
               {list.map((p) => (
-                <tr key={p.id} className="border-t" style={{ borderColor: "#F3F4F6" }}>
+                <tr key={p.id} className="border-t" style={{ borderColor: dash.border }}>
                   <td className="px-3 py-1.5" style={{ color: dash.mutedLight }}>{p.projectNumber ?? "-"}</td>
-                  <td className="px-3 py-1.5">{p.name}</td>
+                  <td className="px-3 py-1.5" style={{ color: dash.text }}>{p.name}</td>
                   <td className="px-3 py-1.5">
                     <span
                       className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                      style={p.status === "Optie" ? { background: "#DBEAFE", color: dash.blue } : { background: "#FEF3C7", color: "#92400E" }}
+                      style={
+                        p.status === "Optie"
+                          ? { background: "rgba(91,141,239,0.15)", color: dash.blue }
+                          : { background: "rgba(245,166,35,0.15)", color: dash.orange }
+                      }
                     >
                       {p.status}
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 font-semibold" style={{ color: p.expired ? dash.redDark : dash.muted }}>
+                  <td className="px-3 py-1.5 font-semibold" style={{ color: p.expired ? dash.red : dash.muted }}>
                     {formatDate(p.planperiodEnd)}
                   </td>
-                  <td className="px-3 py-1.5 text-right font-semibold">{formatEuro(p.revenue)}</td>
+                  <td className="px-3 py-1.5 text-right font-semibold" style={{ color: dash.text }}>{formatEuro(p.revenue)}</td>
                 </tr>
               ))}
             </tbody>
