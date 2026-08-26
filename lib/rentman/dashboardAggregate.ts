@@ -15,10 +15,12 @@ export type Subproject = {
   createdAt: Date;
   planperiodStart: Date | null;
   planperiodEnd: Date | null;
+  city: string | null;
+  businessUnit: string;
+  category: string;
 };
 
 const CANCELLED = "Geannuleerd";
-const PENDING_STATUSES = ["Optie", "Aanvraag"];
 
 function sum(values: number[]) {
   return values.reduce((a, b) => a + b, 0);
@@ -38,7 +40,22 @@ export function overviewKpis(subs: Subproject[]) {
   const optieRevenue = sum(subs.filter((s) => s.status === "Optie").map((s) => s.revenue));
   const cancelled = subs.filter((s) => s.status === CANCELLED);
   const cancelledRevenue = sum(cancelled.map((s) => s.cancelledRevenue ?? 0));
-  return { totalProjects, totalRevenue, totalInvoiced, invoicedPct, optieRevenue, cancelledRevenue, cancelledCount: cancelled.length };
+  // "In optie" en "Direct opvolgen" komen ook als eigen KPI-kaart op de
+  // Overzicht-tab (referentiedashboard v6.1) -- hergebruik dezelfde telling
+  // als de eigen tabbladen ("In optie & aanvraag" resp. "Opvolging").
+  const inOptieCount = subs.filter((s) => s.status === "Optie").length;
+  const directOpvolgenCount = followUpKpis(subs).aandachtCount;
+  return {
+    totalProjects,
+    totalRevenue,
+    totalInvoiced,
+    invoicedPct,
+    optieRevenue,
+    cancelledRevenue,
+    cancelledCount: cancelled.length,
+    inOptieCount,
+    directOpvolgenCount,
+  };
 }
 
 export function monthlySeries(subs: Subproject[]) {
@@ -82,12 +99,73 @@ export function openByStatus(subs: Subproject[]) {
     .sort((a, b) => b.value - a.value);
 }
 
+// --- Tab 1 (vervolg): BV & Categorie -------------------------------------
+//
+// businessUnit/category worden al berekend en opgeslagen door
+// dashboardSync.ts (zie daar voor de exacte afleidingsregels); hier alleen
+// nog aggregatie. Geannuleerde subprojecten (revenue altijd 0) tellen wel
+// mee in de projecttelling maar dragen niets bij aan de omzetcijfers.
+
+export const BV_ORDER = ["EVENTO", "M&R Kampen", "M&R Utrecht"];
+
+export function bvStats(subs: Subproject[]) {
+  const stats: Record<string, { aantal: number; omzet: number; gefact: number }> = {};
+  for (const bv of BV_ORDER) stats[bv] = { aantal: 0, omzet: 0, gefact: 0 };
+  for (const s of subs) {
+    const bv = stats[s.businessUnit] ? s.businessUnit : "M&R Kampen";
+    stats[bv].aantal += 1;
+    stats[bv].omzet += s.revenue;
+    stats[bv].gefact += s.invoiced;
+  }
+  return stats;
+}
+
+export function omzetBvMaand(subs: Subproject[]) {
+  const months = sortedMonths(subs);
+  const result: Record<string, number[]> = {};
+  for (const bv of BV_ORDER) {
+    result[bv] = months.map((month) => sum(subs.filter((s) => s.month === month && s.businessUnit === bv).map((s) => s.revenue)));
+  }
+  return { months, series: result };
+}
+
+export function omzetPerCategorie(subs: Subproject[]) {
+  const result: Record<string, { aantal: number; omzet: number }> = {};
+  for (const s of subs) {
+    const cat = s.category || "Overig";
+    if (!result[cat]) result[cat] = { aantal: 0, omzet: 0 };
+    result[cat].aantal += 1;
+    result[cat].omzet += s.revenue;
+  }
+  return result;
+}
+
+/** Gegroepeerde categorieën voor de gestapelde maandgrafiek: BBQ en Foodtruck
+ * (kleine, seizoensgebonden categorieën) vallen samen met alle overige
+ * niet-Verhuur/Catering-categorieën onder "Overig", zodat de grafiek
+ * leesbaar blijft -- de volledige uitsplitsing staat in de tabel ernaast. */
+export function catGroupMaand(subs: Subproject[]) {
+  const months = sortedMonths(subs);
+  function groupOf(category: string): "Verhuur" | "Catering" | "Overig" {
+    if (category === "Verhuur") return "Verhuur";
+    if (category === "Catering") return "Catering";
+    return "Overig";
+  }
+  const groups = ["Verhuur", "Catering", "Overig"] as const;
+  const result: Record<string, number[]> = {};
+  for (const g of groups) {
+    result[g] = months.map((month) => sum(subs.filter((s) => s.month === month && groupOf(s.category) === g).map((s) => s.revenue)));
+  }
+  return { months, series: result };
+}
+
 // --- Tab 2: Projecten per maand -----------------------------------------
 
 export type ProjectRow = {
   id: string;
   number: string | null;
   name: string;
+  city: string | null;
   period: Date | null;
   revenue: number;
   invoiced: number;
@@ -103,7 +181,7 @@ export function monthDetail(subs: Subproject[], month: string) {
     .map((status) => {
       const rows = inMonth
         .filter((s) => s.status === status)
-        .map((s): ProjectRow => ({ id: s.id, number: s.projectNumber, name: s.name, period: s.planperiodStart, revenue: s.revenue, invoiced: s.invoiced }))
+        .map((s): ProjectRow => ({ id: s.id, number: s.projectNumber, name: s.name, city: s.city, period: s.planperiodStart, revenue: s.revenue, invoiced: s.invoiced }))
         .sort((a, b) => b.revenue - a.revenue);
       const revenue = sum(rows.map((r) => r.revenue));
       const invoiced = sum(rows.map((r) => r.invoiced));
@@ -152,66 +230,136 @@ export function cancelledByMonth(subs: Subproject[]) {
 export function cancelledInMonth(subs: Subproject[], month: string) {
   return subs
     .filter((s) => s.month === month && s.status === CANCELLED)
-    .map((s): ProjectRow => ({ id: s.id, number: s.projectNumber, name: s.name, period: s.planperiodStart, revenue: s.cancelledRevenue ?? 0, invoiced: 0 }))
+    .map((s): ProjectRow => ({ id: s.id, number: s.projectNumber, name: s.name, city: s.city, period: s.planperiodStart, revenue: s.cancelledRevenue ?? 0, invoiced: 0 }))
     .sort((a, b) => b.revenue - a.revenue);
 }
 
-// --- Tab 6: In optie & aanvraag -------------------------------------------
+// --- Tab 4: In optie & aanvraag -------------------------------------------
+//
+// Gegroepeerd per aanmaakmaand (net als de andere tabbladen), gesplitst in
+// twee kolommen (Optie/Aanvraag) -- rechtstreeks overgenomen uit het
+// referentiedashboard (v6.1, `buildColumn`).
+
+export type PendingRow = {
+  id: string;
+  number: string | null;
+  name: string;
+  city: string | null;
+  businessUnit: string;
+  revenue: number;
+  period: Date | null;
+  expired: boolean;
+};
+
+function toPendingRow(s: Subproject, now: Date): PendingRow {
+  return {
+    id: s.id,
+    number: s.projectNumber,
+    name: s.name,
+    city: s.city,
+    businessUnit: s.businessUnit,
+    revenue: s.revenue,
+    period: s.planperiodStart,
+    expired: !!s.planperiodEnd && s.planperiodEnd < now,
+  };
+}
 
 export function pendingKpis(subs: Subproject[]) {
   const optie = subs.filter((s) => s.status === "Optie");
   const aanvraag = subs.filter((s) => s.status === "Aanvraag");
-  const all = [...optie, ...aanvraag];
-  let oldest: Subproject | null = null;
-  for (const s of all) {
-    if (!oldest || s.createdAt < oldest.createdAt) oldest = s;
+  return { optieCount: optie.length, aanvraagCount: aanvraag.length };
+}
+
+/** Optie/aanvraag-projecten per aanmaakmaand, elk gesorteerd oudste eerst. */
+export function pendingByMonth(subs: Subproject[]) {
+  const now = new Date();
+  const months = sortedMonths(subs);
+  function column(status: string) {
+    const result: Record<string, PendingRow[]> = {};
+    for (const month of months) {
+      result[month] = subs
+        .filter((s) => s.month === month && s.status === status)
+        .map((s) => toPendingRow(s, now))
+        .sort((a, b) => (a.period?.getTime() ?? 0) - (b.period?.getTime() ?? 0));
+    }
+    return result;
   }
-  return {
-    optieCount: optie.length,
-    optieRevenue: sum(optie.map((s) => s.revenue)),
-    aanvraagCount: aanvraag.length,
-    aanvraagRevenue: sum(aanvraag.map((s) => s.revenue)),
-    totalRevenue: sum(all.map((s) => s.revenue)),
-    oldest,
-  };
+  return { months, optie: column("Optie"), aanvraag: column("Aanvraag") };
 }
 
-export function pendingList(subs: Subproject[]) {
-  const now = new Date();
-  return subs
-    .filter((s) => PENDING_STATUSES.includes(s.status))
-    .map((s) => ({ ...s, expired: !!s.planperiodEnd && s.planperiodEnd < now }))
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-}
-
-// --- Tab 5: Opvolging (best-effort, zie HANDOVER §10.5) --------------------
+// --- Tab 3: Opvolging -----------------------------------------------------
 //
-// De exacte regels achter "Aandacht"/"Toekomstig"/"Doorlopend" in het
-// referentiedashboard zijn niet uit de data zelf af te leiden (dat was een
-// eenmalige, handmatig gecureerde analyse) -- onderstaande classificatie is
-// een redelijke, transparante benadering: periode al voorbij + nog niet
-// (volledig) gefactureerd = Aandacht; periode nog in de toekomst =
-// Toekomstig. "Doorlopend" (contracten) en de creditnota-filter uit het
-// origineel zijn NIET automatisch te detecteren zonder extra Rentman-
-// velden/config en zijn hier bewust weggelaten i.p.v. gefabriceerd.
+// Regels 1-op-1 overgenomen uit het referentiedashboard (v6.1), teruggevonden
+// via de meegeleverde note-tekst op dat dashboard:
+// - Filter (ongeacht status): omzet > 0, omzet - gefactureerd > 1,
+//   gefactureerd >= -0,01. Geannuleerde subprojecten (omzet altijd 0) vallen
+//   hier vanzelf al buiten, dus een aparte statusuitsluiting is niet nodig.
+// - Doorlopend (🔵): naam bevat "wekelijkse" (ongeacht hoofd-/kleine letters)
+//   -- wordt vóór de andere twee regels getoetst.
+// - Direct opvolgen (🔴): periode (planperiod_end) is verstreken.
+// - Toekomstig (🟡): periode nog niet verstreken, of onbekend.
 
-export type FollowUpFlag = "aandacht" | "toekomstig" | null;
+export type FollowUpFlag = "aandacht" | "toekomstig" | "doorlopend";
 
-export function followUpList(subs: Subproject[]) {
-  const now = new Date();
-  return subs
-    .filter((s) => s.status !== CANCELLED && !PENDING_STATUSES.includes(s.status) && s.revenue - s.invoiced > 0.01)
-    .map((s) => {
-      let flag: FollowUpFlag = null;
-      if (s.planperiodEnd && s.planperiodEnd < now) flag = "aandacht";
-      else if (s.planperiodStart && s.planperiodStart > now) flag = "toekomstig";
-      return { ...s, open: s.revenue - s.invoiced, flag };
-    })
-    .sort((a, b) => a.month.localeCompare(b.month) || b.open - a.open);
+export type FollowUpRow = {
+  id: string;
+  number: string | null;
+  name: string;
+  city: string | null;
+  open: number;
+  period: Date | null;
+  expired: boolean;
+  flag: FollowUpFlag;
+};
+
+function followUpFlagOf(s: Subproject, now: Date): FollowUpFlag {
+  if (s.name.toLowerCase().includes("wekelijkse")) return "doorlopend";
+  if (s.planperiodEnd && s.planperiodEnd < now) return "aandacht";
+  return "toekomstig";
+}
+
+function followUpFiltered(subs: Subproject[]) {
+  return subs.filter((s) => s.revenue > 0 && s.revenue - s.invoiced > 1 && s.invoiced >= -0.01);
 }
 
 export function followUpKpis(subs: Subproject[]) {
-  const list = followUpList(subs);
-  const aandacht = list.filter((s) => s.flag === "aandacht");
-  return { directCount: aandacht.length, directRevenue: sum(aandacht.map((s) => s.open)) };
+  const now = new Date();
+  const list = followUpFiltered(subs).map((s) => followUpFlagOf(s, now));
+  return {
+    aandachtCount: list.filter((f) => f === "aandacht").length,
+    toekomstigCount: list.filter((f) => f === "toekomstig").length,
+    doorlopendCount: list.filter((f) => f === "doorlopend").length,
+  };
+}
+
+/** Opvolgingsprojecten per aanmaakmaand, uitgesplitst in de 3 secties,
+ * elk gesorteerd op hoogste openstaand bedrag (net als het referentiedashboard). */
+export function followUpByMonth(subs: Subproject[]) {
+  const now = new Date();
+  const months = sortedMonths(subs);
+  const filtered = followUpFiltered(subs);
+  const result: Record<string, { aandacht: FollowUpRow[]; toekomstig: FollowUpRow[]; doorlopend: FollowUpRow[] }> = {};
+  for (const month of months) {
+    const inMonth = filtered.filter((s) => s.month === month);
+    const rows: FollowUpRow[] = inMonth.map((s) => {
+      const flag = followUpFlagOf(s, now);
+      return {
+        id: s.id,
+        number: s.projectNumber,
+        name: s.name,
+        city: s.city,
+        open: s.revenue - s.invoiced,
+        period: s.planperiodStart,
+        expired: !!s.planperiodEnd && s.planperiodEnd < now,
+        flag,
+      };
+    });
+    const byOpenDesc = (a: FollowUpRow, b: FollowUpRow) => b.open - a.open;
+    result[month] = {
+      aandacht: rows.filter((r) => r.flag === "aandacht").sort(byOpenDesc),
+      toekomstig: rows.filter((r) => r.flag === "toekomstig").sort(byOpenDesc),
+      doorlopend: rows.filter((r) => r.flag === "doorlopend").sort(byOpenDesc),
+    };
+  }
+  return { months, data: result };
 }

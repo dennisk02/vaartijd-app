@@ -13,17 +13,41 @@ export class AfasApiError extends Error {
 }
 
 type AfasConfig = {
-  token: string;
+  /** Ruwe omgevingscode zoals ingevuld, bv. "T36369AA" (voor logging). */
+  environmentCode: string;
+  /** Alleen de cijfers uit de omgevingscode -- dát is wat AFAS in de
+   * REST-hostname verwacht (`<cijfers>.rest.afas.online`), niet de volledige
+   * code met voorvoegsel/suffix. Ontdekt via live DNS-onderzoek: het
+   * voorvoegsel geeft het omgevingstype aan (O=Productie, T=Test,
+   * A=Acceptatie) en telt niet mee in de hostnaam. */
+  environmentNumber: string;
+  clientId: string;
+  clientSecret: string;
   baseUrl: string;
 };
 
 function getAfasConfig(): AfasConfig | null {
-  const environmentId = process.env.AFAS_ENVIRONMENT_ID;
-  const token = process.env.AFAS_TOKEN;
-  if (!environmentId || !token) return null;
+  const environmentCode = process.env.AFAS_ENVIRONMENT_ID;
+  const clientId = process.env.AFAS_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.AFAS_OAUTH_CLIENT_SECRET;
+  if (!environmentCode || !clientId || !clientSecret) return null;
 
-  const baseUrl = process.env.AFAS_BASE_URL || `https://${environmentId}.rest.afas.online/ProfitRestServices`;
-  return { token, baseUrl };
+  const environmentNumber = environmentCode.replace(/\D/g, "");
+  if (!environmentNumber) return null;
+
+  // Zichtbaar in de serverlogs welk omgevingstype actief is -- vooral
+  // belangrijk zolang dit een T(est)-omgeving is: uren komen dan niet in de
+  // echte/productie-AFAS-boekhouding terecht.
+  const envType = environmentCode.trim().charAt(0).toUpperCase();
+  if (envType !== "O") {
+    console.warn(
+      `AFAS-omgevingscode "${environmentCode}" is geen Productie-omgeving (voorvoegsel "${envType}", ` +
+        `verwacht "O"). Uren komen dus niet in de echte AFAS-boekhouding terecht.`
+    );
+  }
+
+  const baseUrl = process.env.AFAS_BASE_URL || `https://${environmentNumber}.rest.afas.online/profitrestservices`;
+  return { environmentCode, environmentNumber, clientId, clientSecret, baseUrl };
 }
 
 export function isAfasConfigured() {
@@ -31,20 +55,80 @@ export function isAfasConfigured() {
 }
 
 /**
+ * OAuth2 client-credentials-token, in-memory gecached (proces-breed, dus
+ * per server-instance) totdat het bijna verloopt -- AFAS-tokens zijn
+ * doorgaans ~1 uur geldig. Ingericht door Royaal/Willem van Melis
+ * (24 aug 2026), zie e-mail-uitleg in HANDOVER.md §10.1.
+ *
+ * LET OP: het exacte request-formaat hieronder (form-urlencoded,
+ * grant_type=client_credentials) volgt de RFC 6749-standaard voor OAuth2
+ * client-credentials, die AFAS zelf noemt te gebruiken -- maar is niet
+ * regel-voor-regel geverifieerd tegen AFAS' eigen (JS-gerenderde, niet
+ * scrapebare) technische documentatie. Verifieer dit via
+ * `testAfasConnection()` vóórdat hier op vertrouwd wordt voor echte
+ * urenexport.
+ */
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getAccessToken(config: AfasConfig): Promise<string> {
+  const now = Date.now();
+  if (cachedToken && cachedToken.expiresAt > now + 30_000) {
+    return cachedToken.token;
+  }
+
+  const tokenUrl = `https://${config.environmentNumber}.rest.afas.online/profitrestservices/oauth/token`;
+  const response = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+    }),
+  });
+
+  const rawBody = await response.text();
+  let parsedBody: unknown = rawBody;
+  try {
+    parsedBody = rawBody ? JSON.parse(rawBody) : null;
+  } catch {
+    // AFAS geeft bij fouten soms platte tekst terug.
+  }
+
+  if (!response.ok) {
+    throw new AfasApiError(`AFAS OAuth-token ophalen mislukt (HTTP ${response.status}).`, {
+      status: response.status,
+      body: parsedBody,
+    });
+  }
+
+  const data = parsedBody as { access_token?: string; expires_in?: number } | null;
+  if (!data?.access_token) {
+    throw new AfasApiError("AFAS OAuth-respons bevat geen access_token.", { body: parsedBody });
+  }
+
+  cachedToken = { token: data.access_token, expiresAt: now + (data.expires_in ?? 3600) * 1000 };
+  return cachedToken.token;
+}
+
+/**
  * @param path Pad relatief aan de ProfitRestServices-basis-URL, bv.
- *   `connectors/MijnConnector` of `metainfo/update/MijnConnector`.
+ *   `connectors/PtRealisation` of `metainfo/update/PtRealisation`.
  */
 export async function afasFetch(path: string, options: { method: "GET" | "POST"; body?: unknown }) {
   const config = getAfasConfig();
   if (!config) {
-    throw new AfasApiError("AFAS-koppeling is niet geconfigureerd (AFAS_ENVIRONMENT_ID / AFAS_TOKEN ontbreken).");
+    throw new AfasApiError(
+      "AFAS-koppeling is niet geconfigureerd (AFAS_ENVIRONMENT_ID / AFAS_OAUTH_CLIENT_ID / AFAS_OAUTH_CLIENT_SECRET ontbreken)."
+    );
   }
 
+  const token = await getAccessToken(config);
   const url = `${config.baseUrl}/${path}`;
   const response = await fetch(url, {
     method: options.method,
     headers: {
-      Authorization: `AfasToken ${config.token}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       Accept: "application/json",
     },

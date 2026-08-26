@@ -172,11 +172,11 @@ export function PerMonthTab({ subs, months }: { subs: Subproject[]; months: stri
                     <table className="w-full min-w-[520px] border-collapse text-[11px]">
                       <thead>
                         <tr>
-                          {["#", "Project", "Periode", "Omzet", "Gefact.", "Open", "%"].map((h, i) => (
+                          {["#", "Project", "Locatie", "Periode", "Omzet", "Gefact.", "Open", "%"].map((h, i) => (
                             <th
                               key={h}
                               className="px-2.5 py-1.5 text-[10px] font-semibold uppercase"
-                              style={{ background: dash.panel2, color: dash.muted, textAlign: i >= 3 ? "right" : "left" }}
+                              style={{ background: dash.panel2, color: dash.muted, textAlign: i >= 4 ? "right" : "left" }}
                             >
                               {h}
                             </th>
@@ -191,6 +191,7 @@ export function PerMonthTab({ subs, months }: { subs: Subproject[]; months: stri
                             <tr key={r.id} className="border-t" style={{ borderColor: dash.border }}>
                               <td className="px-2.5 py-1" style={{ color: dash.mutedLight }}>{r.number ?? "-"}</td>
                               <td className="px-2.5 py-1" style={{ color: dash.text }}>{r.name}</td>
+                              <td className="px-2.5 py-1" style={{ color: dash.muted }}>{r.city ? `📍 ${r.city}` : "-"}</td>
                               <td className="px-2.5 py-1" style={{ color: dash.muted }}>{formatDate(r.period)}</td>
                               <td className="px-2.5 py-1 text-right font-semibold" style={{ color: dash.text }}>{formatEuro(r.revenue)}</td>
                               <td className="px-2.5 py-1 text-right font-semibold" style={{ color: dash.emerald }}>{formatEuro(r.invoiced)}</td>

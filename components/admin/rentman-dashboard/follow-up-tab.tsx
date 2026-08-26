@@ -1,87 +1,110 @@
+"use client";
+
+import { useState } from "react";
 import { dash } from "./colors";
 import { KpiCard, KpiGrid, Callout } from "./kpi-card";
 import { formatDate, formatEuro, formatMonthLabel } from "./format";
-import type { Subproject } from "@/lib/rentman/dashboardAggregate";
-import { followUpKpis, followUpList } from "@/lib/rentman/dashboardAggregate";
+import type { FollowUpRow, Subproject } from "@/lib/rentman/dashboardAggregate";
+import { followUpByMonth, followUpKpis } from "@/lib/rentman/dashboardAggregate";
 
-/** Tabblad "Opvolging" -- niet-gefactureerde (bevestigde) projecten, met een
- * best-effort classificatie of de periode al verlopen is. Zie de toelichting
- * in lib/rentman/dashboardAggregate.ts en HANDOVER.md §10.5 voor waarom dit
- * een benadering is i.p.v. een exacte kopie van het referentiedashboard --
- * de "Doorlopend"/creditnota-regels daar waren een eenmalige handmatige
- * analyse die niet uit de Rentman-API zelf af te leiden is. */
+const SECTIONS: { key: "aandacht" | "toekomstig" | "doorlopend"; label: string }[] = [
+  { key: "aandacht", label: "🔴 Direct opvolgen (verlopen periode)" },
+  { key: "toekomstig", label: "🟡 Toekomstig" },
+  { key: "doorlopend", label: "🔵 Doorlopend" },
+];
+
+/** Tabblad "Opvolging" -- exact overgenomen van het referentiedashboard
+ * (v6.1): filter/classificatieregels staan toegelicht in
+ * lib/rentman/dashboardAggregate.ts. */
 export function FollowUpTab({ subs }: { subs: Subproject[] }) {
   const kpi = followUpKpis(subs);
-  const list = followUpList(subs);
-  const byMonth = new Map<string, typeof list>();
-  for (const item of list) {
-    const arr = byMonth.get(item.month) ?? [];
-    arr.push(item);
-    byMonth.set(item.month, arr);
-  }
-  const months = [...byMonth.keys()].sort();
+  const { months, data } = followUpByMonth(subs);
+  const [active, setActive] = useState(months[0] ?? "");
+  const month = active || months[0] || "";
+  const monthData = data[month];
 
   return (
     <div className="flex flex-col gap-3.5">
       <KpiGrid>
-        <KpiCard label="Direct opvolgen" value={`${kpi.directCount} proj.`} valueColor={dash.red} sub={`${formatEuro(kpi.directRevenue)} open omzet`} tint={dash.redSoft} />
-        <KpiCard label="Niet-gefactureerd" value={`${list.length} proj.`} sub="Alle openstaande projecten" />
+        <KpiCard label="Direct opvolgen" value={String(kpi.aandachtCount)} valueColor={dash.red} tint={dash.redSoft} />
+        <KpiCard label="Toekomstig" value={String(kpi.toekomstigCount)} valueColor={dash.orange} />
+        <KpiCard label="Doorlopend" value={String(kpi.doorlopendCount)} valueColor={dash.blue} />
       </KpiGrid>
 
-      <Callout tone="info">
-        ⚠ <b>Aandacht</b> = periode al voorbij, nog niet (volledig) gefactureerd — direct opvolgen &nbsp;·&nbsp; 📅{" "}
-        <b>Toekomstig</b> = periode nog in de toekomst. Best-effort classificatie op basis van Rentmans periodevelden; een
-        aparte &quot;Doorlopend&quot;-categorie (contracten) en de creditnota-uitsluiting uit het oorspronkelijke voorbeeld zijn met de
-        huidige Rentman-velden niet betrouwbaar automatisch te bepalen.
-      </Callout>
-
       <div className="rounded-[10px] border p-4" style={{ background: dash.panel, borderColor: dash.border }}>
-        <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.text }}>
-          Niet-gefactureerde projecten per maand
-        </h2>
-        <p className="mb-3 text-[11px]" style={{ color: dash.mutedLight }}>
-          Gegroepeerd per aanmaakmaand · Status zichtbaar per project
-        </p>
-        {months.length === 0 && <p className="text-sm" style={{ color: dash.mutedLight }}>Niets openstaand.</p>}
-        <div className="flex flex-col gap-4">
-          {months.map((month) => (
-            <div key={month}>
-              <div className="mb-1.5 text-xs font-bold" style={{ color: dash.text }}>
-                {formatMonthLabel(month)}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] border-collapse text-[12px]">
-                  <thead>
-                    <tr>
-                      {["", "#", "Project", "Status", "Periode tot", "Open omzet"].map((h, i) => (
-                        <th key={i} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase" style={{ background: dash.panel2, color: dash.muted, textAlign: i === 5 ? "right" : "left" }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(byMonth.get(month) ?? []).map((p) => (
-                      <tr key={p.id} className="border-t" style={{ borderColor: dash.border }}>
-                        <td className="px-2.5 py-1.5">
-                          {p.flag === "aandacht" ? "⚠" : p.flag === "toekomstig" ? "📅" : ""}
-                        </td>
-                        <td className="px-2.5 py-1.5" style={{ color: dash.mutedLight }}>{p.projectNumber ?? "-"}</td>
-                        <td className="px-2.5 py-1.5" style={{ color: dash.text }}>{p.name}</td>
-                        <td className="px-2.5 py-1.5" style={{ color: dash.muted }}>{p.status}</td>
-                        <td className="px-2.5 py-1.5 font-semibold" style={{ color: p.flag === "aandacht" ? dash.red : dash.muted }}>
-                          {formatDate(p.planperiodEnd)}
-                        </td>
-                        <td className="px-2.5 py-1.5 text-right font-semibold" style={{ color: dash.red }}>{formatEuro(p.open)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {months.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setActive(m)}
+              className="rounded-lg border px-2.5 py-1 text-[11px] font-semibold"
+              style={
+                month === m
+                  ? { background: dash.blue, borderColor: dash.blue, color: "#fff" }
+                  : { background: dash.panel2, borderColor: dash.border, color: dash.muted }
+              }
+            >
+              {formatMonthLabel(m)}
+            </button>
           ))}
         </div>
+
+        {monthData && SECTIONS.every((sec) => monthData[sec.key].length === 0) && (
+          <p className="text-sm" style={{ color: dash.mutedLight }}>Geen openstaande projecten deze maand.</p>
+        )}
+
+        <div className="flex flex-col gap-4">
+          {monthData &&
+            SECTIONS.map((sec) => {
+              const rows = monthData[sec.key];
+              if (rows.length === 0) return null;
+              return (
+                <div key={sec.key}>
+                  <div className="mb-1.5 text-xs font-bold" style={{ color: dash.text }}>
+                    {sec.label} ({rows.length})
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[560px] border-collapse text-[12px]">
+                      <thead>
+                        <tr>
+                          {["#", "Project", "Locatie", "Open bedrag", "Periode"].map((h, i) => (
+                            <th
+                              key={h}
+                              className="px-2.5 py-1.5 text-[10px] font-semibold uppercase"
+                              style={{ background: dash.panel2, color: dash.muted, textAlign: i === 3 ? "right" : "left" }}
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((r: FollowUpRow) => (
+                          <tr key={r.id} className="border-t" style={{ borderColor: dash.border }}>
+                            <td className="px-2.5 py-1.5" style={{ color: dash.mutedLight }}>{r.number ?? "-"}</td>
+                            <td className="px-2.5 py-1.5" style={{ color: dash.text }}>{r.name}</td>
+                            <td className="px-2.5 py-1.5" style={{ color: dash.muted }}>{r.city ? `📍 ${r.city}` : "-"}</td>
+                            <td className="px-2.5 py-1.5 text-right font-semibold" style={{ color: dash.red }}>{formatEuro(r.open)}</td>
+                            <td className="px-2.5 py-1.5 font-semibold" style={{ color: r.expired ? dash.red : dash.muted }}>
+                              {formatDate(r.period)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
       </div>
+
+      <Callout tone="info">
+        <b>Filter:</b> projecten met openstaand bedrag (omzet &gt; 0, omzet − gefactureerd &gt; 1, gefactureerd ≥ −0,01),
+        ongeacht status. 🔵 <b>Doorlopend</b> = naam bevat &quot;wekelijkse&quot;. 🔴 <b>Direct opvolgen</b> = periode
+        verlopen. 🟡 <b>Toekomstig</b> = periode nog niet verlopen of onbekend. Gesorteerd op hoogste openstaand bedrag.
+      </Callout>
     </div>
   );
 }

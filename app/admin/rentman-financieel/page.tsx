@@ -6,7 +6,6 @@ import { RentmanDashboardTabs } from "@/components/admin/rentman-dashboard/tabs"
 import { OverviewTab } from "@/components/admin/rentman-dashboard/overview-tab";
 import { PerMonthTab } from "@/components/admin/rentman-dashboard/per-month-tab";
 import { CancelledTab } from "@/components/admin/rentman-dashboard/cancelled-tab";
-import { MaandoverlegTab } from "@/components/admin/rentman-dashboard/maandoverleg-tab";
 import { FollowUpTab } from "@/components/admin/rentman-dashboard/follow-up-tab";
 import { PendingTab } from "@/components/admin/rentman-dashboard/pending-tab";
 import { dash } from "@/components/admin/rentman-dashboard/colors";
@@ -33,6 +32,9 @@ export default async function RentmanFinancieelPage() {
     createdAt: r.createdAt,
     planperiodStart: r.planperiodStart,
     planperiodEnd: r.planperiodEnd,
+    city: r.city,
+    businessUnit: r.businessUnit,
+    category: r.category,
   }));
 
   const months = [...new Set(subs.map((s) => s.month))].sort();
@@ -75,20 +77,20 @@ export default async function RentmanFinancieelPage() {
         ) : (
           <RentmanDashboardTabs
             tabs={[
-              { id: "overzicht", label: "📈 Omzet & Facturatie", content: <OverviewTab subs={subs} /> },
-              { id: "projecten", label: "📋 Projecten per maand", content: <PerMonthTab subs={subs} months={months} /> },
-              { id: "geannuleerd", label: "❌ Geannuleerd", content: <CancelledTab subs={subs} months={months} /> },
               {
-                id: "maandoverleg",
-                label: "📝 Maandoverleg",
+                id: "overzicht",
+                label: "📈 Overzicht",
                 content: (
-                  <MaandoverlegTab
+                  <OverviewTab
+                    subs={subs}
                     invoicedMonthly={invoicedMonthly.map((r) => ({ month: r.month, invoicedExclVat: Number(r.invoicedExclVat) }))}
                   />
                 ),
               },
+              { id: "projecten", label: "📋 Projecten per maand", content: <PerMonthTab subs={subs} months={months} /> },
               { id: "opvolging", label: "⚠ Opvolging", content: <FollowUpTab subs={subs} /> },
               { id: "inoptie", label: "🔴 In optie & aanvraag", content: <PendingTab subs={subs} /> },
+              { id: "geannuleerd", label: "❌ Geannuleerd", content: <CancelledTab subs={subs} months={months} /> },
             ]}
           />
         )}

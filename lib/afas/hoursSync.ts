@@ -7,36 +7,42 @@ type TimeEntryWithRelations = Prisma.TimeEntryGetPayload<{
   include: { user: true; project: true };
 }>;
 
+/// Werksoort-/itemcode (ItCd) en boekingsstatus (StId) zijn in AFAS vaste,
+/// omgeving-specifieke codes -- niet per medewerker/project verschillend
+/// voor deze eenvoudige urenregistratie. Ingesteld via env i.p.v.
+/// hardcoded, zodat ze zonder codewijziging aan te passen zijn zodra
+/// Royaal/Willem van Melis de definitieve waarden bevestigt (het "300"/"1"
+/// uit hun voorbeeld-e-mail was mogelijk een generiek sjabloonvoorbeeld,
+/// niet per se de daadwerkelijke code voor Kuipers Beheer BV).
+const AFAS_ITEM_CODE = process.env.AFAS_HOURS_ITEM_CODE || "300";
+const AFAS_STATUS_ID = process.env.AFAS_HOURS_STATUS_ID || "1";
+
 /**
- * Bouwt de payload voor de AFAS UpdateConnector die de uren ontvangt.
+ * Bouwt de payload voor de AFAS PtRealisation-UpdateConnector (bevestigd
+ * door Royaal/Willem van Melis, 24 aug 2026 -- zie HANDOVER.md §10.1).
  *
- * LET OP: dit is de enige plek die aangepast moet worden zodra de exacte
- * AFAS-connectornaam en veldnamen bekend zijn. De structuur hieronder is een
- * standaard AFAS UpdateConnector-envelop (Element/Fields/Objects); de
- * concrete veldnamen (EmId, ProjectCode, Hours, ...) moeten worden vervangen
- * door de veldnamen zoals AFAS die voor deze specifieke connector verwacht.
+ * LET OP -- `PrId` (projectnummer) is een AANNAME, gebaseerd op de
+ * gangbare AFAS-conventie voor dit type connector: het ontbrak in het
+ * door Royaal aangeleverde velden-voorbeeld (mogelijk afgesneden bij het
+ * kopiëren van het scherm). Dit MOET geverifieerd worden met een
+ * testaanroep (bv. via `testAfasConnection()` of één losse echte boeking)
+ * vóórdat hier structureel op vertrouwd wordt -- zonder het juiste
+ * projectveld komen de uren mogelijk helemaal niet, of op het verkeerde
+ * project, in AFAS terecht.
  */
 function mapTimeEntryToAfas(entry: TimeEntryWithRelations) {
   return {
-    AfasEmployee: {
+    PtRealisationWeek: {
       Element: {
         Fields: {
           EmId: entry.user.afasEmployeeNumber,
+          DaTi: entry.date.toISOString().slice(0, 10),
+          ItCd: AFAS_ITEM_CODE,
+          StId: AFAS_STATUS_ID,
+          QuD1: Number(entry.hours),
+          // Onbevestigd veld -- zie toelichting hierboven.
+          PrId: entry.project.afasProjectCode,
         },
-        Objects: [
-          {
-            AfasProjectHours: {
-              Element: {
-                Fields: {
-                  Date: entry.date.toISOString().slice(0, 10),
-                  ProjectCode: entry.project.afasProjectCode,
-                  Hours: Number(entry.hours),
-                  Description: entry.description ?? "",
-                },
-              },
-            },
-          },
-        ],
       },
     },
   };

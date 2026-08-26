@@ -14,7 +14,7 @@ import {
  *
  * Slaat bewust GEEN vooraf-geaggregeerde cijfers op -- elk subproject wordt
  * los bewaard in `RentmanSubprojectSnapshot`, en alle KPI's/grafieken/
- * tabellen van de 6 tabbladen worden er bij het opbouwen van de pagina uit
+ * tabellen van de 5 tabbladen worden er bij het opbouwen van de pagina uit
  * afgeleid (zie lib/rentman/dashboardAggregate.ts). Bij ~800 rijen is dat
  * in-memory triviaal snel, en het voorkomt dat elke nieuwe doorsnede een
  * eigen vooraf-berekende tabel nodig heeft.
@@ -39,6 +39,39 @@ function cancelledRevenueOf(sp: RentmanFinancialSubproject): number | null {
   return Number(sp.project_total_price_cancelled ?? 0);
 }
 
+/**
+ * Business unit: projectnaam start met "EVENTO" -> EVENTO; anders bepaald
+ * via het magazijn (`asset_location_from`, bv. "/stocklocations/4"):
+ * /stocklocations/4 -> M&R Utrecht, /stocklocations/1 -> M&R Kampen,
+ * onbekend/leeg (bv. oude projecten van vóór de magazijn-koppeling) valt
+ * terug op M&R Kampen. Rechtstreeks overgenomen uit het referentiedashboard
+ * (v6.1), waar dit expliciet als correcte fallback bevestigd is.
+ */
+function businessUnitOf(sp: RentmanFinancialSubproject): string {
+  if (sp.name.trim().toUpperCase().startsWith("EVENTO")) return "EVENTO";
+  if (sp.asset_location_from === "/stocklocations/4") return "M&R Utrecht";
+  return "M&R Kampen";
+}
+
+/**
+ * Categorie: sleutelwoord-classificatie op de naam van het Rentman
+ * project-type (project.project_type.name) -- er is geen expliciet
+ * categorie-veld in Rentman. Onbekend/ontbrekend project-type valt terug op
+ * "Overig", net als het referentiedashboard (v6.1) doet.
+ */
+function categoryOf(sp: RentmanFinancialSubproject): string {
+  const typeName = (sp.project?.project_type?.name ?? "").toLowerCase();
+  if (typeName.includes("foodtruck")) return "Foodtruck";
+  if (typeName.includes("bbq")) return "BBQ";
+  if (typeName.includes("food") || typeName.includes("buffet")) return "Catering";
+  if (typeName.includes("verhuur")) return "Verhuur";
+  return "Overig";
+}
+
+function cityOf(sp: RentmanFinancialSubproject): string | null {
+  return sp.location?.visit_city || sp.location?.mailing_city || null;
+}
+
 export async function syncRentmanDashboard() {
   const year = new Date().getUTCFullYear();
   const [subprojects, invoices] = await Promise.all([
@@ -61,6 +94,9 @@ export async function syncRentmanDashboard() {
       createdAt: new Date(sp.created),
       planperiodStart: sp.planperiod_start ? new Date(sp.planperiod_start) : null,
       planperiodEnd: sp.planperiod_end ? new Date(sp.planperiod_end) : null,
+      city: cityOf(sp),
+      businessUnit: businessUnitOf(sp),
+      category: categoryOf(sp),
     };
     await prisma.rentmanSubprojectSnapshot.upsert({
       where: { rentmanSubprojectId: String(sp.id) },

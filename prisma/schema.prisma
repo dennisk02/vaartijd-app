@@ -316,6 +316,22 @@ model RentmanSubprojectSnapshot {
   createdAt            DateTime
   planperiodStart      DateTime?
   planperiodEnd        DateTime?
+  /// Plaatsnaam van het subproject (Rentmans `location.visit_city`, anders
+  /// `mailing_city`) -- "-" resp. null als er geen locatie/contact gekoppeld
+  /// is. Puur ter weergave ("Locatie"-kolom), speelt geen rol in aggregaties.
+  city                 String?
+  /// Business unit: "EVENTO" (projectnaam begint met "EVENTO"), anders
+  /// bepaald via het magazijn/stocklocation van het subproject
+  /// (`asset_location_from`): /stocklocations/4 -> "M&R Utrecht",
+  /// /stocklocations/1 (of onbekend/leeg, als fallback) -> "M&R Kampen".
+  /// Zie dashboardSync.ts voor de exacte afleiding.
+  businessUnit         String
+  /// Categorie afgeleid van Rentmans project-type-naam (via
+  /// project.project_type), met een sleutelwoord-classificatie: bevat
+  /// "foodtruck" -> Foodtruck, "bbq" -> BBQ, "food"/"buffet" -> Catering,
+  /// "verhuur" -> Verhuur, anders -> Overig (ook als project_type ontbreekt).
+  /// Zie dashboardSync.ts.
+  category             String
   computedAt           DateTime  @updatedAt
 
   @@index([month])

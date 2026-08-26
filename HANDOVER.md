@@ -184,11 +184,14 @@ Volledige bron: [`prisma/schema.prisma`](prisma/schema.prisma). Kernpunten per m
   `modified`-watermark (incrementele sync).
 - **`RentmanSubprojectSnapshot`** — de ruwe brontabel voor het financiële Rentman-dashboard
   (§10.5): één rij per Rentman-subproject, jaargescoped, elke run **volledig herberekend**
-  (upsert + opschoning van rijen buiten de huidige jaarscope — geen incrementele sync). Alle
-  KPI's/grafieken/tabellen van de 6 tabbladen worden hier bij paginaopbouw uit afgeleid
-  (`lib/rentman/dashboardAggregate.ts`) i.p.v. los vooraf-geaggregeerd te worden.
+  (upsert + opschoning van rijen buiten de huidige jaarscope — geen incrementele sync). Naast de
+  financiële velden ook `city`/`businessUnit`/`category` (voor de "Locatie"-kolommen resp. de
+  "BV & Categorie"-sectie, zie §10.5). Alle KPI's/grafieken/tabellen van de 5 tabbladen worden hier
+  bij paginaopbouw uit afgeleid (`lib/rentman/dashboardAggregate.ts`) i.p.v. los
+  vooraf-geaggregeerd te worden.
 - **`RentmanInvoicedMonthly`** — apart van `RentmanSubprojectSnapshot` omdat dit op
-  **factuurdatum** groepeert i.p.v. aanmaakdatum (voor het Maandoverleg-scherm/AFAS-aansluiting).
+  **factuurdatum** groepeert i.p.v. aanmaakdatum (voor de Maandoverleg-sectie op het
+  Overzicht-tabblad/AFAS-aansluiting).
 
 **Indexen:** naast de voor de hand liggende unieke constraints staan er `@@index`'en op
 `TimeEntry(userId, date)`, `TimeEntry(afasSyncStatus)`, `TimeEntry(shiftbaseSyncStatus)` en op
@@ -364,19 +367,52 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
 
 ## 10. Integraties
 
-### 10.1 AFAS Profit (uren-export) — **scaffold, nog niet productie-klaar**
+### 10.1 AFAS Profit (uren-export) — **connector bevestigd, velden nog niet live geverifieerd**
 
-- Module: `lib/afas/client.ts` (generieke REST-wrapper, `AfasToken`-header) +
-  `lib/afas/hoursSync.ts` (mapt een `TimeEntry` naar een AFAS UpdateConnector-payload).
-- **Status: niet geverifieerd tegen een echte AFAS-omgeving voor uren.** De payload-structuur
-  in `mapTimeEntryToAfas()` is een standaard AFAS UpdateConnector-envelop
-  (`Element/Fields/Objects`), maar de **exacte connectornaam en veldnamen zijn nog niet
-  afgestemd** met AFAS/de klant. Dat is de enige plek die aangepast hoeft te worden zodra die
-  bekend zijn — zie de `LET OP`-comment in dat bestand.
-- Env vars: `AFAS_ENVIRONMENT_ID`, `AFAS_TOKEN`, `AFAS_HOURS_CONNECTOR`, `AFAS_SYNC_SECRET`.
-  **Op dit moment staat alleen `AFAS_ENVIRONMENT_ID` ingevuld in productie — `AFAS_TOKEN`
-  ontbreekt nog.** Zolang die leeg is, degradeert de app gracieus: uren blijven op
-  `afasSyncStatus = PENDING` staan, er gebeurt verder niets.
+- Module: `lib/afas/client.ts` (REST-wrapper, **OAuth2 client-credentials**, zie onder) +
+  `lib/afas/hoursSync.ts` (mapt een `TimeEntry` naar de AFAS `PtRealisation`-UpdateConnector-
+  payload).
+- **OAuth2 i.p.v. statische token (24 aug 2026, ingericht door Royaal/Willem van Melis):** het
+  eerdere statische-`AfasToken`-mechanisme (`AFAS_TOKEN`) is vervangen door een echte OAuth2
+  client-credentials-flow, de door AFAS aanbevolen aanpak voor systeem-naar-systeem-koppelingen.
+  `getAccessToken()` wisselt `AFAS_OAUTH_CLIENT_ID`/`AFAS_OAUTH_CLIENT_SECRET` in bij
+  `https://<omgevingsnummer>.rest.afas.online/profitrestservices/oauth/token` (standaard OAuth2
+  `grant_type=client_credentials`, form-urlencoded) voor een ~1 uur geldig access-token,
+  in-memory gecached per serverinstance. Live geverifieerd (24 aug 2026): dit request-formaat
+  wordt door AFAS geaccepteerd (een echte, betekenisvolle foutrespons kwam terug, geen
+  transport-/formaatfout — zie hieronder).
+  - **Omgevingscode vs. omgevingsnummer (live ontdekte valkuil, opgelost):** `AFAS_ENVIRONMENT_ID`
+    bevat de volledige AFAS-omgevingscode zoals in de inlog-URL (bv. `T36369AA` — voorvoegsel
+    `O`=Productie/`T`=Test/`A`=Acceptatie, gevolgd door het eigenlijke omgevingsnummer, gevolgd
+    door een suffix). De REST-hostname gebruikt **alleen de cijfers** uit die code
+    (`36369.rest.afas.online`), niet de volledige code met voorvoegsel/suffix — een eerste
+    poging met de volledige code gaf domeinnamen die helemaal niet bestonden (DNS-fout). `getAfasConfig()`
+    haalt dit nu zelf uit elkaar (`environmentNumber = environmentCode.replace(/\D/g, "")`).
+    **Let op:** een `T`-voorvoegsel betekent een Test-omgeving — `getAfasConfig()` logt een
+    waarschuwing als het voorvoegsel niet `O` (Productie) is, want dan komen uren niet in de
+    echte AFAS-boekhouding terecht.
+  - **Openstaande blokkade (24 aug 2026):** met de juiste hostname bevestigd reageert AFAS'
+    token-endpoint met `401`/`{"error":"unauthorized_client","error_description":"Unknown
+    AppConnector or AppConnector not enabled"}`. Dit is een AFAS-zijdig configuratieprobleem,
+    geen codefout hier — waarschijnlijk moet de "Skrepr"-App Connector nog geactiveerd worden
+    in AFAS Profit, of de Client ID/Secret in `.env` komt niet exact overeen met wat Royaal heeft
+    aangemaakt. Navragen bij Willem van Melis/Royaal voordat verder getest kan worden.
+- **Connector- en veldnamen bevestigd, twee waarden nog onzeker:** Royaal stuurde een werkend
+  voorbeeld van de `PtRealisation`-UpdateConnector (envelop `PtRealisationWeek`/`Element`/
+  `Fields`, velden `EmId`/`DaTi`/`ItCd`/`StId`/`QuD1`). `mapTimeEntryToAfas()` in
+  `lib/afas/hoursSync.ts` gebruikt deze exacte veldnamen. **Twee dingen zijn nog niet
+  bevestigd:**
+  1. Het **projectveld** (`PrId`) ontbrak in het aangeleverde voorbeeld — waarschijnlijk
+     afgesneden bij het kopiëren van het scherm, `PrId` is de gangbare AFAS-conventie voor dit
+     type connector, maar dit is een aanname totdat een echte testboeking het bevestigt.
+  2. De **waarden** voor `ItCd` (werksoort-/itemcode, fallback `"300"`) en `StId`
+     (boekingsstatus, fallback `"1"`) — overgenomen uit Royaal's voorbeeld-e-mail, mogelijk een
+     generiek sjabloon i.p.v. de daadwerkelijke code voor déze administratie. Aanpasbaar via
+     `AFAS_HOURS_ITEM_CODE`/`AFAS_HOURS_STATUS_ID` zonder codewijziging.
+- Env vars: `AFAS_ENVIRONMENT_ID`, `AFAS_OAUTH_CLIENT_ID`, `AFAS_OAUTH_CLIENT_SECRET`,
+  `AFAS_HOURS_CONNECTOR` (standaard `PtRealisation`), optioneel `AFAS_HOURS_ITEM_CODE`/
+  `AFAS_HOURS_STATUS_ID`, `AFAS_SYNC_SECRET`. Zolang Client ID/Secret ontbreken degradeert de
+  app gracieus: uren blijven op `afasSyncStatus = PENDING` staan, er gebeurt verder niets.
 - Trigger: `/admin/afas` (handmatig) of `POST/GET /api/afas/sync` (extern, met
   `Authorization: Bearer <AFAS_SYNC_SECRET>`).
 
@@ -509,11 +545,12 @@ hierboven), en zodra AFAS een betaling registreert, die betaalstatus terugzetten
   (velden: `moment`, `amount`, `description`, `payment_import_source`), of via de losse
   `payments`-resource (`update`-actie). **Nog niet getest** — dat raakt echte financiële data
   in Rentman, dus bewust niet zomaar geprobeerd.
-- **AFAS-kant staat nog niet aan**: `AFAS_TOKEN` is nog leeg (zie §10.1). Het aanmaken van een
-  verkoopboeking + bijlage in AFAS vereist een specifiek geconfigureerde UpdateConnector
-  (dagboek/grootboek/btw-code per administratie, en hoe een bijlage precies wordt meegestuurd)
-  — dat moet worden uitgezocht zodra er een echte AFAS-token is (via AFAS' eigen
-  `metainfo`-endpoints, of navragen bij de AFAS-consultant van de klant).
+- **AFAS-kant voor verkoopfacturen staat nog niet aan**: de nu bevestigde OAuth-koppeling
+  (§10.1) is alleen voor de `PtRealisation`-uren-connector — een verkoopboeking + bijlage
+  wegschrijven vereist een **aparte, nog niet afgesproken** UpdateConnector (dagboek/
+  grootboek/btw-code per administratie, en hoe een bijlage precies wordt meegestuurd) — dat
+  moet nog worden uitgezocht (via AFAS' eigen `metainfo`-endpoints, of navragen bij Willem van
+  Melis/Royaal, de AFAS-consultant van de klant).
 
 **Afgesproken regels (bevestigd door de klant, niet zelf verzinnen):**
 - Administratie-routing: naam begint met `"EVENTO - "` → 21 (Evento), anders → 02 (Events).
@@ -541,14 +578,34 @@ richting Rentman, net als §10.2 — dit voegt geen nieuwe schrijfrichting toe.
 
 **Architectuur:** één ruwe brontabel, geen vooraf-geaggregeerde tussentabellen. `RentmanSubprojectSnapshot`
 bevat één rij per Rentman-subproject (jaargescoped, elke nacht volledig ververst — rijen buiten
-scope worden verwijderd). Alle KPI's/grafieken/tabellen van de 6 tabbladen worden hieruit
+scope worden verwijderd). Alle KPI's/grafieken/tabellen van de 5 tabbladen worden hieruit
 *bij het opbouwen van de pagina* afgeleid via pure functies in `lib/rentman/dashboardAggregate.ts`
-(`overviewKpis`, `monthlySeries`, `statusByMonth`, `openByStatus`, `monthDetail`, `cancelledKpis`,
-`cancelledByMonth`/`cancelledInMonth`, `pendingKpis`/`pendingList`, `followUpKpis`/`followUpList`)
+(`overviewKpis`, `monthlySeries`, `statusByMonth`, `openByStatus`, `bvStats`/`omzetBvMaand`/
+`omzetPerCategorie`/`catGroupMaand`, `monthDetail`, `cancelledKpis`, `cancelledByMonth`/
+`cancelledInMonth`, `pendingKpis`/`pendingByMonth`, `followUpKpis`/`followUpByMonth`)
 — bij ~800 rijen is dat in-memory triviaal snel, en het voorkomt dat elke nieuwe doorsnede een
 eigen precomputed tabel nodig heeft (eerdere opzet met `RentmanMonthlySnapshot`+`RentmanPendingProject`
 is hierom vervangen, migratie `20260824065117_rentman_subproject_snapshot`). `RentmanInvoicedMonthly`
-(factuurdatum-groepering, voor Maandoverleg) blijft wel een losse tabel.
+(factuurdatum-groepering, voor de Maandoverleg-sectie op het Overzicht-tabblad) blijft wel een
+losse tabel.
+
+Naast de financiële velden bevat elke snapshot-rij ook `city`, `businessUnit` en `category`
+(migratie `20260825120000_rentman_bv_categorie_locatie`, toegevoegd bij de v6.1-vergelijking
+hieronder) — alle drie afgeleid in `dashboardSync.ts` (`cityOf`/`businessUnitOf`/`categoryOf`):
+- `city`: `location.visit_city` (val terug op `mailing_city`) van het subproject — puur voor
+  weergave ("Locatie"-kolom), speelt geen rol in aggregaties.
+- `businessUnit`: `"EVENTO"` als de projectnaam daarmee begint; anders via het magazijn
+  (`asset_location_from`, bv. `/stocklocations/4`): `/stocklocations/4` → `"M&R Utrecht"`,
+  anders (incl. `/stocklocations/1` en onbekend/leeg, bv. oude projecten van vóór de
+  magazijn-koppeling) → `"M&R Kampen"` (fallback). Rechtstreeks overgenomen uit het
+  referentiedashboard v6.1, waar dit expliciet als correcte fallback bevestigd stond.
+- `category`: sleutelwoord-classificatie op de naam van het Rentman project-type
+  (`project.project_type.name`, expand `project.project_type`) — bevat "foodtruck" → Foodtruck,
+  "bbq" → BBQ, "food"/"buffet" → Catering, "verhuur" → Verhuur, anders (of ontbrekend
+  project-type) → Overig. Er is geen expliciet categorie-veld in Rentman; deze regel is een
+  benadering, maar bij een live vergelijking (25 aug 2026) kwamen BBQ/Overig/Foodtruck-aantallen
+  exact overeen met het referentiedashboard en Verhuur/Catering op een paar procent na (verklaarbaar
+  door dataverschil tussen de "gisteren"-snapshot van de referentie en live data).
 
 - Module: `lib/rentman/dashboardSync.ts` (`syncRentmanDashboard()`), gebruikt twee fetch-functies
   in `lib/rentman/client.ts`: `fetchAllSubprojectsFinancial(year)` en `fetchAllInvoicesForDashboard(year)`.
@@ -561,8 +618,12 @@ is hierom vervangen, migratie `20260824065117_rentman_subproject_snapshot`). `Re
   `new Date().getUTCFullYear()` door aan beide functies, en ruimt na elke sync rijen buiten de
   verse jaarscope expliciet op (`deleteMany` met `notIn`, alleen als de fetch daadwerkelijk
   resultaten opleverde).
-- **`number` zit op het Project, niet op het Subproject** (zelfde valkuil als §10.2) — daarom
-  `expand: "project,status"` en toegang via `sp.project?.number`.
+- **`number` en `project_type` zitten op het Project, niet op het Subproject** (zelfde valkuil als
+  §10.2) — daarom `expand: "project.project_type,status,location"` en toegang via
+  `sp.project?.number` resp. `sp.project?.project_type?.name`. **Let op:** Rentman filtert `fields=`
+  niet door naar geëxpandeerde relaties — `project` en `location` komen dus als volledige, geneste
+  objecten terug (niet beperkt tot de gevraagde velden), merkbaar zwaarder dan voorheen maar bij
+  ~800 subprojecten/jaar nog ruim binnen de 5MB-responslimiet.
 - **"Gederfde omzet" voor geannuleerde projecten (live ontdekte bug — 24 aug 2026 opgelost):**
   Rentman zet `project_total_price` op **0** zodra een subproject geannuleerd wordt. De eerste
   opzet gebruikte dat veld overal, waardoor "Gederfde omzet" altijd €0 toonde. Rentman heeft
@@ -573,30 +634,41 @@ is hierom vervangen, migratie `20260824065117_rentman_subproject_snapshot`). `Re
   omzet nooit meetelt in de actieve omzettotalen. Verwacht dat dit KPI-getal van dag tot dag
   merkbaar springt (elke nieuwe annulering met een groot offertebedrag telt direct mee) — dat is
   correct/gewenst gedrag voor een "live" dashboard, geen bug.
-- **6 tabbladen, exact als het referentiedashboard** (de eerste versie voegde "Opvolging" en
-  "In optie & aanvraag" ten onrechte samen tot 1 tab — dat zijn twee verschillende dingen):
-  1. **Omzet & Facturatie** — 5 KPI's, 4 grafieken (omzet vs. gefactureerd, facturatiegraad,
-     omzet per status per maand gestapeld, open omzet per status als donut).
+- **5 tabbladen, exact als het referentiedashboard v6.1 ("samengevoegd")** — bijgewerkt 25 aug 2026
+  na vergelijking met een nieuwe referentie-export (`rentman_dashboard_v6_1.html`), die zelf ook
+  "Maandoverleg" niet meer als apart tabblad had en een nieuwe "BV & Categorie"-sectie toevoegde:
+  1. **Overzicht** — 5 KPI's (Projecten, Projectomzet, Gefactureerd %, In optie, Direct opvolgen),
+     4 grafieken (omzet vs. gefactureerd, facturatiegraad, omzet per status per maand gestapeld,
+     open omzet per status als donut); daaronder twee samengevoegde subsecties (niet langer eigen
+     tabbladen):
+     - **Maandoverleg — op factuurdatum:** KPI "Totaal gefactureerd (factuurdatum)" + grafiek +
+       toelichting. De handmatige-invoersectie (per-locatie cijfers, model
+       `RentmanManualMonthlyEntry`) is op verzoek van de klant al op 24 aug 2026 verwijderd
+       (migratie `20260824085516_drop_rentman_manual_entry`) en blijft verwijderd — dit is puur
+       Rentman-afgeleide factuurdatumcijfers.
+     - **BV & Categorie:** 3 KPI-kaarten (EVENTO/M&R Kampen/M&R Utrecht, met projectaantal, omzet
+       en facturatiegraad), 2 gestapelde maandgrafieken (omzet per BV; Verhuur/Catering/Overig),
+       en 2 tabellen (omzet per BV per maand, omzet per categorie). Zie hierboven voor de
+       BV/categorie-afleidingsregels.
   2. **Projecten per maand** — opent met een grafiek die alle maanden in één oogopslag toont
      (omzet per status, gestapeld, dezelfde `statusByMonth()`-aggregatie als tabblad 1); daaronder
      een maandkiezer met per maand 2 KPI's, een statuslijst met voortgangsbalken, een donut, en
-     per status een kleurkoptabel met individuele projecten (#, Project, Periode, Omzet, Gefact.,
-     Open, %).
-  3. **Geannuleerd** — 4 KPI's (incl. gederfde omzet, grootste annulering), 2 grafieken,
-     maandkiezer met tabel van geannuleerde projecten gesorteerd op offertebedrag.
-  4. **Maandoverleg** — gefactureerd-per-factuurdatum-grafiek + de bestaande factuurdatum-tabel.
-     De handmatige-invoersectie (per-locatie cijfers EVENTO/M&R Kampen/M&R Utrecht, model
-     `RentmanManualMonthlyEntry`) is op verzoek van de klant weer volledig verwijderd
-     (24 aug 2026, migratie `20260824085516_drop_rentman_manual_entry`) — dit tabblad toont nu
-     alleen nog Rentman-afgeleide factuurdatumcijfers.
-  5. **Opvolging** — niet-gefactureerde projecten per maand, best-effort geclassificeerd als
-     ⚠ Aandacht (periode al voorbij) of 📅 Toekomstig (periode nog in de toekomst). **Let op:**
-     de "Doorlopend"-categorie (contracten) en de creditnota-uitsluiting uit het
-     referentiedashboard waren daar een eenmalige, handmatig gecureerde analyse — met de huidige
-     Rentman-velden niet betrouwbaar automatisch af te leiden, en daarom bewust weggelaten i.p.v.
-     gefabriceerd. Zie `followUpList()` in `dashboardAggregate.ts` voor de exacte regels.
-  6. **In optie & aanvraag** — alle projecten met status Optie/Aanvraag, oudste aanmaakdatum
-     eerst, rood gemarkeerd wanneer de periode al verlopen is.
+     per status een kleurkoptabel met individuele projecten (#, Project, Locatie, Periode, Omzet,
+     Gefact., Open, %) — de Locatie-kolom is nieuw (25 aug 2026, gebruikt het nieuwe `city`-veld).
+  3. **Opvolging** — regels **1-op-1 overgenomen** uit het referentiedashboard v6.1 (niet langer
+     best-effort — de exacte regels stonden als toelichtingstekst op dat dashboard):
+     filter (ongeacht status) omzet > 0, omzet − gefactureerd > 1, gefactureerd ≥ −0,01;
+     🔵 **Doorlopend** = naam bevat "wekelijkse" (eerst getoetst); 🔴 **Direct opvolgen** = periode
+     (planperiod_end) verstreken; 🟡 **Toekomstig** = periode nog niet verstreken of onbekend.
+     Gegroepeerd per aanmaakmaand (subtabs), elke sectie gesorteerd op hoogste openstaand bedrag.
+     Zie `followUpByMonth()`/`followUpKpis()` in `dashboardAggregate.ts`.
+  4. **In optie & aanvraag** — alle projecten met status Optie/Aanvraag, per aanmaakmaand (subtabs)
+     in twee parallelle kolommen (net als v6.1's `buildColumn`), met Locatie en BV-kolom, rood
+     gemarkeerd wanneer de periode al verlopen is. Zie `pendingByMonth()`.
+  5. **Geannuleerd** — 4 KPI's (incl. gederfde omzet, grootste annulering), 2 grafieken,
+     maandkiezer met tabel van geannuleerde projecten (#, Project, Locatie, Reden annulering,
+     Gederfde omzet) gesorteerd op offertebedrag. "Reden annulering" toont altijd "niet bekend"
+     (net als v6.1) — geen custom veld in Rentman, zie de Callout op dit tabblad.
 - **Donker thema (25 aug 2026)** — de klant leverde een tweede stijlgids aan
   (`instructie_dashboardstijl_vaartijden.md`) met een donker kleurenschema (`--bg #0f1115`,
   panelen `#171a21`/`#1e222b`, 4 semantische kleuren blauw/groen/oranje/rood) en vroeg dit
@@ -635,8 +707,10 @@ Volledige, actuele lijst — zie ook [`.env.example`](.env.example).
 | `DATABASE_URL_UNPOOLED` | ✅ | Neon Postgres, direct (nodig voor Prisma migraties) |
 | `SESSION_SECRET` | ✅ | Random string voor JWT-ondertekening (`openssl rand -base64 32`) |
 | `AFAS_ENVIRONMENT_ID` | optioneel | AFAS-omgevingscode — **al ingevuld in productie** |
-| `AFAS_TOKEN` | optioneel | AFAS App Connector-token — **nog leeg in productie** |
-| `AFAS_HOURS_CONNECTOR` | optioneel | Naam van de AFAS UpdateConnector voor uren |
+| `AFAS_OAUTH_CLIENT_ID` | optioneel | OAuth2 client-credentials, aangeleverd door Royaal (24 aug 2026) |
+| `AFAS_OAUTH_CLIENT_SECRET` | optioneel | Idem — behandel als wachtwoord, nooit loggen |
+| `AFAS_HOURS_CONNECTOR` | optioneel | Naam van de AFAS UpdateConnector voor uren (`PtRealisation`) |
+| `AFAS_HOURS_ITEM_CODE` / `AFAS_HOURS_STATUS_ID` | optioneel | Vaste ItCd/StId-waarden, zie §10.1 — fallback `"300"`/`"1"` |
 | `AFAS_SYNC_SECRET` | optioneel | Secret voor externe trigger van `/api/afas/sync` |
 | `SHIFTBASE_API_KEY` | optioneel | Shiftbase API-sleutel — **ingevuld in productie, lezen werkt** |
 | `SHIFTBASE_BASE_URL` | optioneel | Override van de standaard Shiftbase-basis-URL |
@@ -790,8 +864,14 @@ zijn.
 
 Gesorteerd op vermoedelijke prioriteit voor de klant:
 
-1. **AFAS-koppeling niet productie-klaar** — token ontbreekt, connector/veldnamen niet
-   afgestemd (zowel voor uren als voor het nieuwe verkoopfacturen-plan). Zie §10.1 en §10.4.
+1. **AFAS-koppeling voor uren: geblokkeerd op "Unknown AppConnector or AppConnector not
+   enabled"** — Royaal heeft de `PtRealisation`-connector + OAuth-gegevens aangeleverd
+   (24 aug 2026), de REST-hostname/omgevingsnummer-valkuil is gevonden en opgelost, maar het
+   OAuth-token-endpoint wijst de huidige Client ID/Secret af. Navragen bij Willem van Melis of
+   de "Skrepr"-App Connector geactiveerd is in AFAS Profit. Ook nog te bevestigen zodra dat werkt:
+   `PrId` (projectveld, aanname) en de `ItCd`/`StId`-waarden (mogelijk generieke
+   voorbeeldwaarden). Voor het nieuwe verkoopfacturen-plan (AFAS-kant) is nog niets afgestemd.
+   Zie §10.1 en §10.4.
 2. **Rentman → AFAS verkoopfacturen + PDF-bijlage + betaal-terugkoppeling** — plan is met de
    klant besproken en de Rentman-kant is technisch geverifieerd (MCP), maar er is nog geen
    regel code voor geschreven. Zie §10.4 voor de volledige stand van zaken.
@@ -813,11 +893,13 @@ Gesorteerd op vermoedelijke prioriteit voor de klant:
    maar goed om te weten voor wie hier niet bij was).
 8. **Rapportagepagina's en admin-schermen zijn Nederlandstalig** — vertaling is nooit
    meegenomen (bewuste keuze, niet vergeten of kapot).
-9. **Financieel dashboard, Opvolging-tab is best-effort** — de "Aandacht"/"Toekomstig"-vlaggen
-   zijn een redelijke benadering (periode verlopen resp. in de toekomst), maar de
-   "Doorlopend"-categorie (contracten) en de creditnota-uitsluiting uit het referentiedashboard
-   waren daar een eenmalige handmatige analyse die niet uit de huidige Rentman-velden is af te
-   leiden. Zie §10.5 voor de exacte regels en de reden waarom dit bewust niet nagebouwd is.
+9. ~~Financieel dashboard, Opvolging-tab is best-effort~~ — **opgelost 25 aug 2026:** een nieuwe
+   referentie-export (v6.1) bevatte de exacte filter-/classificatieregels (incl. "Doorlopend" =
+   naam bevat "wekelijkse") als toelichtingstekst, nu 1-op-1 overgenomen in `followUpByMonth()`.
+   Zie §10.5. De categorie-classificatie (Verhuur/Catering/BBQ/Foodtruck/Overig) blijft wel een
+   sleutelwoord-benadering op het Rentman project-type, bij gebrek aan een expliciet
+   categorie-veld — bij een live steekproef kwamen BBQ/Overig/Foodtruck exact overeen met de
+   referentie, Verhuur/Catering op een paar procent na.
 10. **2FA: geen rate-limiting op foutieve codes, geen back-up codes** — bewust buiten scope
     gehouden bij het bouwen (24 aug 2026); een volledige beheerder kan altijd via "2FA resetten"
     (`/admin/users/[id]`) iemand die zijn telefoon kwijt is weer toegang geven. Zie §6.

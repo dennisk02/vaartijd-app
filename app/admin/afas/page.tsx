@@ -26,8 +26,9 @@ export default async function AdminAfasPage() {
         <Card className="border-amber-300 bg-amber-50">
           <p className="text-sm text-amber-800">
             AFAS-koppeling is nog niet geconfigureerd. Vul <code>AFAS_ENVIRONMENT_ID</code>,{" "}
-            <code>AFAS_TOKEN</code> en <code>AFAS_HOURS_CONNECTOR</code> in via de omgevingsvariabelen om te
-            synchroniseren. Tot die tijd blijven uren op &quot;Wacht op sync&quot; staan.
+            <code>AFAS_OAUTH_CLIENT_ID</code>, <code>AFAS_OAUTH_CLIENT_SECRET</code> en{" "}
+            <code>AFAS_HOURS_CONNECTOR</code> in via de omgevingsvariabelen om te synchroniseren. Tot die tijd
+            blijven uren op &quot;Wacht op sync&quot; staan.
           </p>
         </Card>
       )}

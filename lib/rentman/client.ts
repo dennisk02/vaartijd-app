@@ -113,9 +113,10 @@ export async function fetchAllSubprojects({ sinceModified }: { sinceModified?: s
 export type RentmanFinancialSubproject = {
   id: number | string;
   name: string;
-  // "number" zit op het bovenliggende Project, niet op het Subproject zelf --
-  // vandaar expand=project hieronder (zelfde patroon als fetchAllSubprojects).
-  project?: { number?: number | string } | null;
+  // "number" en "project_type" zitten op het bovenliggende Project, niet op
+  // het Subproject zelf -- vandaar expand=project.project_type hieronder
+  // (project_type is nodig voor de "Categorie"-classificatie, §10.5).
+  project?: { number?: number | string; project_type?: { name?: string } | null } | null;
   status?: { name?: string } | null;
   planperiod_start?: string | null;
   planperiod_end?: string | null;
@@ -128,6 +129,14 @@ export type RentmanFinancialSubproject = {
   // project_total_price_cancelled=356.615).
   project_total_price_cancelled?: number | string | null;
   already_invoiced?: number | string | null;
+  // Magazijn/stocklocation-koppeling, bv. "/stocklocations/4" -- bepaalt de
+  // business unit (M&R Kampen/M&R Utrecht) als de projectnaam niet met
+  // "EVENTO" begint. Bevestigd via live Rentman-data (§10.5).
+  asset_location_from?: string | null;
+  // Contact-locatie van het subproject; alleen `visit_city`/`mailing_city`
+  // worden gebruikt (voor de "Locatie"-kolom) -- de rest van dit (grote)
+  // contact-object wordt genegeerd.
+  location?: { visit_city?: string | null; mailing_city?: string | null } | null;
 };
 
 /**
@@ -141,12 +150,17 @@ export type RentmanFinancialSubproject = {
  * duizenden, teruggaand tot 2023), wat het dashboard vervuilt met oude,
  * allang afgeronde projecten (en soms rare facturatiepercentages door latere
  * prijscorrecties op oude, al afgesloten projecten).
+ *
+ * `expand=project.project_type,status,location` levert de volledige geneste
+ * Project- resp. Contact-objecten op (Rentman filtert `fields=` niet door
+ * naar geëxpandeerde relaties) -- merkbaar zwaardere respons dan voorheen,
+ * maar bij ~800 subprojecten/jaar nog steeds ruim binnen de 5MB-limiet.
  */
 export async function fetchAllSubprojectsFinancial(year: number) {
   return rentmanFetchAll<RentmanFinancialSubproject>("subprojects", {
-    expand: "project,status",
+    expand: "project.project_type,status,location",
     fields:
-      "id,name,project,status,planperiod_start,planperiod_end,created,project_total_price,project_total_price_cancelled,already_invoiced",
+      "id,name,project,status,planperiod_start,planperiod_end,created,project_total_price,project_total_price_cancelled,already_invoiced,asset_location_from,location",
     "created[gte]": `${year}-01-01T00:00:00+00:00`,
     "created[lt]": `${year + 1}-01-01T00:00:00+00:00`,
   });

@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { ChartTooltip } from "./chart-tooltip";
 import { dash } from "./colors";
 import { KpiCard, KpiGrid, Callout, ChartCard } from "./kpi-card";
-import { formatDate, formatEuro, formatMonthLabel } from "./format";
+import { formatEuro, formatMonthLabel } from "./format";
 import type { Subproject } from "@/lib/rentman/dashboardAggregate";
 import { cancelledByMonth, cancelledInMonth, cancelledKpis } from "@/lib/rentman/dashboardAggregate";
 
@@ -93,11 +93,11 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
           ))}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[420px] border-collapse text-[12px]">
+          <table className="w-full min-w-[520px] border-collapse text-[12px]">
             <thead>
               <tr>
-                {["#", "Project", "Periode", "Offertebedrag"].map((h, i) => (
-                  <th key={h} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase" style={{ background: dash.panel2, color: dash.muted, textAlign: i >= 3 ? "right" : "left" }}>
+                {["#", "Project", "Locatie", "Reden annulering", "Gederfde omzet"].map((h, i) => (
+                  <th key={h} className="px-2.5 py-1.5 text-[10px] font-semibold uppercase" style={{ background: dash.panel2, color: dash.muted, textAlign: i === 4 ? "right" : "left" }}>
                     {h}
                   </th>
                 ))}
@@ -106,7 +106,7 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-4 text-center text-sm" style={{ color: dash.mutedLight }}>
+                  <td colSpan={5} className="p-4 text-center text-sm" style={{ color: dash.mutedLight }}>
                     Geen annuleringen deze maand.
                   </td>
                 </tr>
@@ -115,7 +115,12 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
                 <tr key={r.id} className="border-t" style={{ borderColor: dash.border }}>
                   <td className="px-2.5 py-1.5" style={{ color: dash.mutedLight }}>{r.number ?? "-"}</td>
                   <td className="px-2.5 py-1.5" style={{ color: dash.text }}>{r.name}</td>
-                  <td className="px-2.5 py-1.5" style={{ color: dash.muted }}>{formatDate(r.period)}</td>
+                  <td className="px-2.5 py-1.5" style={{ color: dash.muted }}>{r.city ? `📍 ${r.city}` : "-"}</td>
+                  <td className="px-2.5 py-1.5">
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: dash.panel2, color: dash.muted }}>
+                      niet bekend
+                    </span>
+                  </td>
                   <td className="px-2.5 py-1.5 text-right font-semibold" style={{ color: r.revenue > 0 ? dash.red : dash.mutedLight }}>
                     {r.revenue > 0 ? formatEuro(r.revenue) : "-"}
                   </td>

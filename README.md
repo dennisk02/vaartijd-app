@@ -31,9 +31,9 @@ Registratie van uren op projecten, scheepsbezetting per dag/nacht en maaltijden/
 
 De uren-registraties staan standaard op status "Wacht op sync". Zodra de AFAS App Connector-gegevens bekend zijn:
 
-1. Vul `AFAS_ENVIRONMENT_ID`, `AFAS_TOKEN` en `AFAS_HOURS_CONNECTOR` in `.env` in.
+1. Vul `AFAS_ENVIRONMENT_ID`, `AFAS_OAUTH_CLIENT_ID`, `AFAS_OAUTH_CLIENT_SECRET` en `AFAS_HOURS_CONNECTOR` in `.env` in (OAuth2 client-credentials, zie HANDOVER.md §10.1).
 2. Zorg dat medewerkers een `afasEmployeeNumber` hebben en projecten een `afasProjectCode` (via de beheerpagina's).
-3. Pas de payload-mapping aan in [`lib/afas/hoursSync.ts`](lib/afas/hoursSync.ts) (functie `mapTimeEntryToAfas`) zodra de exacte veldnamen van de AFAS UpdateConnector bekend zijn — dat is de enige plek die hiervoor aangepast hoeft te worden.
+3. De payload-mapping in [`lib/afas/hoursSync.ts`](lib/afas/hoursSync.ts) (functie `mapTimeEntryToAfas`) gebruikt de PtRealisation-veldnamen bevestigd door de AFAS-consultant — het `PrId`-projectveld en de `AFAS_HOURS_ITEM_CODE`/`AFAS_HOURS_STATUS_ID`-waarden zijn nog niet live geverifieerd, zie de code-comment daar.
 4. Test de verbinding en start een synchronisatie via `/admin/afas`.
 
 ## Projectstructuur, integraties, deployment
