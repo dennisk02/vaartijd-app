@@ -466,8 +466,9 @@ niets met elkaar te maken hebben:
 - ~270 horeca-achtige medewerkers (Kitchen/Housekeeping/Management/Bediening/...) verdeeld over
   18 "departments" genaamd "Moods & Roots I" t/m "XIII" (plus een paar niet-schepen: "Kantoor",
   "Quality", "Locatie Utrecht", "Moods&Roots | Events") -- dit is **de vaarbemanning van de
-  River Roots-vloot** (bevestigd door de klant), een heel andere vloot dan de bestaande
-  `Ship`-records in Vaartijd (Alegro, Triton, MS Kuiper, ...).
+  River Roots-vloot** (bevestigd door de klant). Sinds de volledige reset van 27 aug 2026 (zie
+  §12) zijn dit ook meteen **alle** `Ship`-records in Vaartijd -- er zijn geen handmatig
+  aangemaakte schepen meer naast deze Shiftbase-departments.
 - Verder niets -- er is geen "project"-concept in Shiftbase; uren zijn gekoppeld aan een
   gebruiker + een department/team, niet aan een project zoals AFAS/Rentman dat kennen.
 
@@ -695,6 +696,52 @@ hieronder) — alle drie afgeleid in `dashboardSync.ts` (`cityOf`/`businessUnitO
 - Geen nieuwe env vars nodig — hergebruikt `RENTMAN_API_TOKEN` (en `CRON_SECRET`/
   `RENTMAN_SYNC_SECRET` voor de externe trigger) uit §10.2.
 
+### 10.6 Integratiekoppelingen losgemaakt van de kernmodellen (27 aug 2026)
+
+Naar aanleiding van een inschattingsverzoek over het ooit loskoppelen van Rentman/AFAS/
+Shiftbase tot een eigen integratielaag (zie de gepubliceerde "Ontkoppelingsinschatting"-
+artifact) is de eerste, voorbereidende stap **al uitgevoerd**: alle Rentman-/AFAS-/Shiftbase-
+koppelvelden zijn van `User`/`Project`/`Ship`/`TimeEntry` áf gehaald en staan nu in 8 eigen
+1-op-1-koppeltabellen. Dit was mogelijk zonder databasemigratie-risico omdat de app op dat
+moment nog niet in echt gebruik was (zie de "Volledige reset"-paragraaf hierboven) — de
+tabellen zijn na de schemawijziging gewoon opnieuw gevuld via een verse sync.
+
+**Nieuwe modellen** (migratie `20260827100000_integratie_koppeltabellen`):
+`ProjectRentmanLink`, `ProjectAfasLink`, `ProjectShiftbaseLink`, `ShipShiftbaseLink`,
+`UserAfasLink`, `UserShiftbaseLink`, `TimeEntryAfasLink`, `TimeEntryShiftbaseImport`
+(herkomst: geïmporteerd uit Shiftbase) en `TimeEntryShiftbaseExport` (bestemming: export
+náár Shiftbase, nog geblokkeerd/ongeverifieerd, zie §10.3) — bewust twee aparte modellen,
+want import en export zijn onafhankelijke richtingen die nooit dezelfde rij vullen.
+
+**Waarom dit meer was dan de sync-modules herschrijven:** een grep op de te verplaatsen
+veldnamen liet zien dat ook echte kernlogica (niet alleen `lib/rentman|afas|shiftbase/*`) er
+rechtstreeks op las:
+- `lib/assignments.ts` — `projectGroupWhere()`/`shipGroupWhere()` (bepalen EVENTS_EVENTO vs.
+  RIVER_ROOTS) filterden op `shiftbaseDepartmentId`, nu op `shiftbaseLink: { isNot: null }`.
+- `lib/actions/time-entries.ts` (`deleteTimeEntry`) — de guard die voorkomt dat een medewerker
+  al-geëxporteerde uren verwijdert, keek naar `afasSyncStatus`, nu naar `afasLink.syncStatus`.
+
+Beide zijn functioneel ongewijzigd, alleen de queryvorm is anders (relatie i.p.v. platte
+kolom) — geverifieerd met een tijdelijk testaccount: het project-kiesscherm op `/uren` toont
+nog steeds de juiste Rentman-projectnummers, en het aanmaken van een urenregistratie boekt
+nog steeds op het juiste project met een correcte `afasLink`/`shiftbaseExport`-koppelrij.
+
+**Nieuwe schrijfregel:** elke `TimeEntry` krijgt bij aanmaak (in `lib/actions/time-entries.ts`,
+`lib/actions/timer.ts` én `lib/shiftbase/sync.ts`) meteen een `afasLink` (en, behalve bij
+Shiftbase-import, een `shiftbaseExport`) met `syncStatus: PENDING` — dat verving het oude
+`@default(PENDING)` dat rechtstreeks op de kolom stond.
+
+**Ook meegenomen:** `lib/afas/hoursSync.ts` en `lib/shiftbase/hoursSync.ts` gebruiken nu een
+gerichte `select` in plaats van `include: { user: true, project: true }` — dat laatste haalde
+ongemerkt de **volledige** User-/Project-rij op (incl. bv. `passwordHash`) enkel om één of twee
+velden te gebruiken. Relevant voor een toekomstige losse dienst (optie B in de
+ontkoppelingsinschatting): die hoeft zo nooit meer dan `afasEmployeeNumber`/`afasProjectCode`
+te zien.
+
+**Nog niet gedaan** (bewust buiten scope van deze eerste stap, zie de ontkoppelingsinschatting
+voor de volledige vervolgstappen): een eigen map-structuur/toegangslaag (optie A), of een
+losse, apart gedeployde dienst (optie B). Dit is puur de databaselaag.
+
 ---
 
 ## 11. Environment variables
@@ -766,10 +813,26 @@ voor visuele verificatie, niet bedoeld als doorlopend proces).
 (gedeelde dev/prod-)database verwijderd op verzoek van de klant — 9 demo-medewerkers
 (`@demo.vaartijd.nl`), hun ~23.856 synthetische registraties (uren/bezetting/maaltijden/afval),
 en de 10 demo-schepen/5 demo-projecten die nooit door een echte medewerker gebruikt zijn. Twee
-demo-schepen/projecten (`Alegro`, `Havenwerkzaamheden`) bleken inmiddels wél echte registraties
-te hebben en zijn **niet** verwijderd. `seed-demo.ts` zelf staat nog in de repo (voor gebruik
-tegen een aparte test-omgeving) maar zou bij het opnieuw draaien tegen déze database dezelfde
+demo-schepen/projecten (`Alegro`, `Havenwerkzaamheden`) bleken toen wél echte registraties te
+hebben en zijn **niet** verwijderd. `seed-demo.ts` zelf staat nog in de repo (voor gebruik tegen
+een aparte test-omgeving) maar zou bij het opnieuw draaien tegen déze database dezelfde
 demo-medewerkers/-schepen/-projecten weer aanmaken.
+
+**Volledige reset naar alleen Rentman/Shiftbase-data (27 aug 2026):** omdat de app op dat moment
+nog niet in echt gebruik was, is op verzoek van de klant de **volledige** inhoud van `User`
+(behalve `admin@kuipersbeheerbv.nl`/`jan@kuipersbeheerbv.nl`), `Project`, `Ship`, `TimeEntry`,
+`ShipOccupancy`, `MealCount`, `FoodWaste` en `DaySubmission` gewist en opnieuw opgebouwd via een
+verse Rentman-projectsync (volledige historie, want het `SyncState`-watermark is ook gewist) +
+Rentman-dashboardsync + Shiftbase-vaarbemanning-import (`syncShiftbaseCrew(60)`, ruimer dan de
+standaard 35 dagen, als marge). **Let op voor wie hierna verder werkt:** dit verwijderde ook drie
+handmatig aangemaakte, niet-Rentman/Shiftbase-records die niet meer terugkomen bij een sync —
+schepen `MS Kuiper`/`MS Zeearend`/`Alegro` en projecten `Onderhoud MS Kuiper`/
+`Onderhoud MS Zeearend`/`Havenwerkzaamheden`. Dat was op dat moment een fout (had eerst
+gecontroleerd moeten worden of alle `Ship`/`Project`-rijen wel écht Rentman/Shiftbase-afkomstig
+waren), maar is door de klant achteraf expliciet geaccepteerd ("nee laat er maar uit, ik wil
+alleen de data uit Shiftbase en Rentman") — dus **niet** opnieuw aanmaken als je deze regel ooit
+tegenkomt. De database bevat sindsdien bewust uitsluitend Rentman-/Shiftbase-afkomstige
+`Project`/`Ship`-rijen (plus de twee genoemde losse accounts).
 
 ---
 

@@ -103,8 +103,10 @@ async function main() {
   const existingProjects = await prisma.project.findMany({ where: { name: { in: PROJECTS.map((p) => p.name) } } });
   const existingProjectNames = new Set(existingProjects.map((p) => p.name));
   const projectsToCreate = PROJECTS.filter((p) => !existingProjectNames.has(p.name));
-  if (projectsToCreate.length > 0) {
-    await prisma.project.createMany({ data: projectsToCreate });
+  // afasProjectCode staat sinds §10.6 in een eigen koppeltabel -- createMany
+  // kan geen relaties zetten, dus per rij (dit script is kleinschalig demodata).
+  for (const p of projectsToCreate) {
+    await prisma.project.create({ data: { name: p.name, afasLink: { create: { afasProjectCode: p.afasProjectCode } } } });
   }
   const projects = await prisma.project.findMany({ where: { name: { in: PROJECTS.map((p) => p.name) } } });
 
@@ -114,15 +116,18 @@ async function main() {
   const employeesToCreate = EMPLOYEES.filter((e) => !existingEmployeeEmails.has(e.email));
   if (employeesToCreate.length > 0) {
     const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
-    await prisma.user.createMany({
-      data: employeesToCreate.map((e) => ({
-        name: e.name,
-        email: e.email,
-        passwordHash,
-        role: "EMPLOYEE",
-        afasEmployeeNumber: e.afasEmployeeNumber,
-      })),
-    });
+    // afasEmployeeNumber staat sinds §10.6 in een eigen koppeltabel.
+    for (const e of employeesToCreate) {
+      await prisma.user.create({
+        data: {
+          name: e.name,
+          email: e.email,
+          passwordHash,
+          role: "EMPLOYEE",
+          afasLink: { create: { afasEmployeeNumber: e.afasEmployeeNumber } },
+        },
+      });
+    }
   }
   const employees = await prisma.user.findMany({ where: { email: { in: EMPLOYEES.map((e) => e.email) } } });
 

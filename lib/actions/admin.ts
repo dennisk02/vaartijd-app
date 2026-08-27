@@ -41,10 +41,12 @@ export async function createProject(_state: AdminFormState, formData: FormData):
     return { errors: validatedFields.error.flatten().fieldErrors };
   }
 
+  const afasProjectCode = validatedFields.data.afasProjectCode || null;
   await prisma.project.create({
     data: {
       name: validatedFields.data.name,
-      afasProjectCode: validatedFields.data.afasProjectCode || null,
+      // afasProjectCode staat sinds §10.6 in een eigen koppeltabel.
+      ...(afasProjectCode ? { afasLink: { create: { afasProjectCode } } } : {}),
     },
   });
 
@@ -127,13 +129,14 @@ export async function createUser(_state: AdminFormState, formData: FormData): Pr
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
+  // afasEmployeeNumber staat sinds §10.6 in een eigen koppeltabel.
   await prisma.user.create({
     data: {
       name,
       email,
       passwordHash,
       role,
-      afasEmployeeNumber: afasEmployeeNumber || null,
+      ...(afasEmployeeNumber ? { afasLink: { create: { afasEmployeeNumber } } } : {}),
     },
   });
 
@@ -184,11 +187,23 @@ export async function updateUserAssignments(userId: string, formData: FormData) 
       canLogWaste,
       useDefaultProject: useDefaultProject && Boolean(defaultProjectId),
       defaultProjectId,
-      shiftbaseEmployeeId,
       projectGroup,
       ...(adminScopes !== undefined ? { adminScopes: { set: adminScopes } } : {}),
     },
   });
+
+  // shiftbaseEmployeeId staat sinds §10.6 in een eigen koppeltabel -- los
+  // bijgewerkt (leegmaken = koppeling verwijderen, i.p.v. een kolom op null
+  // zetten).
+  if (shiftbaseEmployeeId) {
+    await prisma.userShiftbaseLink.upsert({
+      where: { userId },
+      update: { shiftbaseEmployeeId },
+      create: { userId, shiftbaseEmployeeId },
+    });
+  } else {
+    await prisma.userShiftbaseLink.deleteMany({ where: { userId } });
+  }
 
   revalidatePath(`/admin/users/${userId}`);
   revalidatePath("/admin/users");

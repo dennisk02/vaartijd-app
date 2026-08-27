@@ -58,46 +58,42 @@ async function syncShipsAndProjects() {
   const response = (await shiftbaseGet("/departments")) as { data: { Department: ShiftbaseDepartment }[] };
   const departments = response.data.map((row) => ({ ...row.Department, id: String(row.Department.id) }));
 
-  const [existingShips, existingProjects] = await Promise.all([
-    prisma.ship.findMany({
-      where: { shiftbaseDepartmentId: { not: null } },
-      select: { shiftbaseDepartmentId: true, shiftbaseDepartmentName: true },
-    }),
-    prisma.project.findMany({ where: { shiftbaseDepartmentId: { not: null } }, select: { shiftbaseDepartmentId: true } }),
+  const [existingShipLinks, existingProjectLinks] = await Promise.all([
+    prisma.shipShiftbaseLink.findMany({ select: { shiftbaseDepartmentId: true, shiftbaseDepartmentName: true, shipId: true } }),
+    prisma.projectShiftbaseLink.findMany({ select: { shiftbaseDepartmentId: true } }),
   ]);
-  const shipByDept = new Map(existingShips.map((s) => [s.shiftbaseDepartmentId!, s]));
-  const knownProjectDeptIds = new Set(existingProjects.map((p) => p.shiftbaseDepartmentId!));
+  const shipLinkByDept = new Map(existingShipLinks.map((s) => [s.shiftbaseDepartmentId, s]));
+  const knownProjectDeptIds = new Set(existingProjectLinks.map((p) => p.shiftbaseDepartmentId));
 
-  const shipsToCreate = departments.filter((d) => !shipByDept.has(d.id));
+  const shipsToCreate = departments.filter((d) => !shipLinkByDept.has(d.id));
   const shipsToUpdate = departments.filter((d) => {
-    const existing = shipByDept.get(d.id);
+    const existing = shipLinkByDept.get(d.id);
     return existing && existing.shiftbaseDepartmentName !== d.name;
   });
   const projectsToCreate = departments.filter((d) => !knownProjectDeptIds.has(d.id));
 
-  if (shipsToCreate.length > 0) {
-    await prisma.ship.createMany({
-      data: shipsToCreate.map((d) => ({
-        name: d.name,
-        shiftbaseDepartmentId: d.id,
-        shiftbaseDepartmentName: d.name,
-        active: false,
-      })),
+  // Ship en ShipShiftbaseLink zijn sinds 27 aug 2026 losse tabellen (§10.6) --
+  // createMany kan niet in één keer over twee tabellen heen, dus per rij.
+  for (const d of shipsToCreate) {
+    const ship = await prisma.ship.create({ data: { name: d.name, active: false } });
+    await prisma.shipShiftbaseLink.create({
+      data: { shipId: ship.id, shiftbaseDepartmentId: d.id, shiftbaseDepartmentName: d.name },
     });
   }
   for (const d of shipsToUpdate) {
-    await prisma.ship.update({
+    const link = shipLinkByDept.get(d.id)!;
+    await prisma.ship.update({ where: { id: link.shipId }, data: { name: d.name } });
+    await prisma.shipShiftbaseLink.update({
       where: { shiftbaseDepartmentId: d.id },
-      data: { name: d.name, shiftbaseDepartmentName: d.name },
+      data: { shiftbaseDepartmentName: d.name },
     });
   }
-  if (projectsToCreate.length > 0) {
-    await prisma.project.createMany({
-      data: projectsToCreate.map((d) => ({
-        name: `${VAARBEMANNING_PREFIX}${d.name}`,
-        shiftbaseDepartmentId: d.id,
-        active: false,
-      })),
+  for (const d of projectsToCreate) {
+    const project = await prisma.project.create({
+      data: { name: `${VAARBEMANNING_PREFIX}${d.name}`, active: false },
+    });
+    await prisma.projectShiftbaseLink.create({
+      data: { projectId: project.id, shiftbaseDepartmentId: d.id },
     });
   }
 
@@ -109,20 +105,17 @@ async function syncCrewUsers() {
   const response = (await shiftbaseGet("/users?limit=500")) as { data: { User: ShiftbaseUser }[] };
   const shiftbaseUsers = response.data.map((row) => ({ ...row.User, id: String(row.User.id) }));
 
-  const [existingByShiftbaseId, allEmails] = await Promise.all([
-    prisma.user.findMany({
-      where: { shiftbaseEmployeeId: { not: null } },
-      select: { id: true, shiftbaseEmployeeId: true, name: true },
-    }),
+  const [existingLinks, allEmails] = await Promise.all([
+    prisma.userShiftbaseLink.findMany({ select: { userId: true, shiftbaseEmployeeId: true, user: { select: { name: true } } } }),
     prisma.user.findMany({ select: { email: true } }),
   ]);
-  const userByShiftbaseId = new Map(existingByShiftbaseId.map((u) => [u.shiftbaseEmployeeId!, u]));
+  const linkByShiftbaseId = new Map(existingLinks.map((l) => [l.shiftbaseEmployeeId, l]));
   const takenEmails = new Set(allEmails.map((u) => u.email.toLowerCase()));
 
-  const toCreate = shiftbaseUsers.filter((u) => !userByShiftbaseId.has(u.id));
+  const toCreate = shiftbaseUsers.filter((u) => !linkByShiftbaseId.has(u.id));
   const toUpdate = shiftbaseUsers.filter((u) => {
-    const existing = userByShiftbaseId.get(u.id);
-    return existing && existing.name !== fullName(u);
+    const existing = linkByShiftbaseId.get(u.id);
+    return existing && existing.user.name !== fullName(u);
   });
 
   if (toCreate.length > 0) {
@@ -132,23 +125,20 @@ async function syncCrewUsers() {
     // sowieso inloggen (active = false), dus een uniek wachtwoord per
     // account levert geen extra veiligheid op.
     const sharedPasswordHash = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 10);
-    const rows = toCreate.map((u) => {
+    for (const u of toCreate) {
       const candidate = u.email?.trim().toLowerCase();
       const email =
         candidate && !takenEmails.has(candidate) ? u.email!.trim() : `shiftbase-${u.id}@${PLACEHOLDER_EMAIL_DOMAIN}`;
       takenEmails.add(email.toLowerCase());
-      return {
-        name: fullName(u),
-        email,
-        passwordHash: sharedPasswordHash,
-        shiftbaseEmployeeId: u.id,
-        active: false,
-      };
-    });
-    await prisma.user.createMany({ data: rows });
+      const user = await prisma.user.create({
+        data: { name: fullName(u), email, passwordHash: sharedPasswordHash, active: false },
+      });
+      await prisma.userShiftbaseLink.create({ data: { userId: user.id, shiftbaseEmployeeId: u.id } });
+    }
   }
   for (const u of toUpdate) {
-    await prisma.user.update({ where: { shiftbaseEmployeeId: u.id }, data: { name: fullName(u) } });
+    const link = linkByShiftbaseId.get(u.id)!;
+    await prisma.user.update({ where: { id: link.userId }, data: { name: fullName(u) } });
   }
 
   return shiftbaseUsers.length;
@@ -169,19 +159,20 @@ async function syncTimesheets(days: number) {
     }[];
   };
 
-  const [ships, projects, users, existingEntries] = await Promise.all([
-    prisma.ship.findMany({ where: { shiftbaseDepartmentId: { not: null } }, select: { id: true, shiftbaseDepartmentId: true } }),
-    prisma.project.findMany({ where: { shiftbaseDepartmentId: { not: null } }, select: { id: true, shiftbaseDepartmentId: true } }),
-    prisma.user.findMany({ where: { shiftbaseEmployeeId: { not: null } }, select: { id: true, shiftbaseEmployeeId: true } }),
-    prisma.timeEntry.findMany({
-      where: { shiftbaseTimesheetId: { not: null } },
-      select: { shiftbaseTimesheetId: true, hours: true, startTime: true, endTime: true },
+  const [shipLinks, projectLinks, userLinks, existingImports] = await Promise.all([
+    prisma.shipShiftbaseLink.findMany({ select: { shipId: true, shiftbaseDepartmentId: true } }),
+    prisma.projectShiftbaseLink.findMany({ select: { projectId: true, shiftbaseDepartmentId: true } }),
+    prisma.userShiftbaseLink.findMany({ select: { userId: true, shiftbaseEmployeeId: true } }),
+    prisma.timeEntryShiftbaseImport.findMany({
+      select: { timesheetId: true, timeEntryId: true, timeEntry: { select: { hours: true, startTime: true, endTime: true } } },
     }),
   ]);
-  const shipByDept = new Map(ships.map((s) => [s.shiftbaseDepartmentId!, s.id]));
-  const projectByDept = new Map(projects.map((p) => [p.shiftbaseDepartmentId!, p.id]));
-  const userByShiftbaseId = new Map(users.map((u) => [u.shiftbaseEmployeeId!, u.id]));
-  const existingByTimesheetId = new Map(existingEntries.map((e) => [e.shiftbaseTimesheetId!, e]));
+  const shipByDept = new Map(shipLinks.map((s) => [s.shiftbaseDepartmentId, s.shipId]));
+  const projectByDept = new Map(projectLinks.map((p) => [p.shiftbaseDepartmentId, p.projectId]));
+  const userByShiftbaseId = new Map(userLinks.map((u) => [u.shiftbaseEmployeeId, u.userId]));
+  const existingByTimesheetId = new Map(
+    existingImports.map((e) => [e.timesheetId, { timeEntryId: e.timeEntryId, ...e.timeEntry }])
+  );
 
   let skippedNoShip = 0;
   let skippedNoUser = 0;
@@ -199,7 +190,7 @@ async function syncTimesheets(days: number) {
     hours: number;
     description: string | null;
   }[] = [];
-  const toUpdate: { shiftbaseTimesheetId: string; hours: number; startTime: Date; endTime: Date; breakMinutes: number }[] = [];
+  const toUpdate: { timeEntryId: string; hours: number; startTime: Date; endTime: Date; breakMinutes: number }[] = [];
 
   for (const row of response.data) {
     const entry = row.Timesheet;
@@ -238,7 +229,7 @@ async function syncTimesheets(days: number) {
         Number(existing.hours) !== hours ||
         existing.startTime?.getTime() !== startDateTime.getTime() ||
         existing.endTime?.getTime() !== endDateTime.getTime();
-      if (changed) toUpdate.push({ shiftbaseTimesheetId: timesheetId, hours, startTime: startDateTime, endTime: endDateTime, breakMinutes });
+      if (changed) toUpdate.push({ timeEntryId: existing.timeEntryId, hours, startTime: startDateTime, endTime: endDateTime, breakMinutes });
       continue;
     }
 
@@ -257,12 +248,19 @@ async function syncTimesheets(days: number) {
     });
   }
 
-  if (toCreate.length > 0) {
-    await prisma.timeEntry.createMany({ data: toCreate });
+  // TimeEntry en TimeEntryShiftbaseImport zijn losse tabellen (§10.6) --
+  // createMany kan niet over twee tabellen heen, dus per rij (zelfde patroon
+  // als syncShipsAndProjects/syncCrewUsers hierboven).
+  for (const t of toCreate) {
+    const { shiftbaseTimesheetId, ...entryData } = t;
+    // Ook geïmporteerde vaarbemanning-uren beginnen op PENDING richting AFAS
+    // (crew-uren moeten net zo goed geboekt worden) -- zie §10.6.
+    const entry = await prisma.timeEntry.create({ data: { ...entryData, afasLink: { create: {} } } });
+    await prisma.timeEntryShiftbaseImport.create({ data: { timeEntryId: entry.id, timesheetId: shiftbaseTimesheetId } });
   }
   for (const u of toUpdate) {
     await prisma.timeEntry.update({
-      where: { shiftbaseTimesheetId: u.shiftbaseTimesheetId },
+      where: { id: u.timeEntryId },
       data: { hours: u.hours, startTime: u.startTime, endTime: u.endTime, breakMinutes: u.breakMinutes },
     });
   }

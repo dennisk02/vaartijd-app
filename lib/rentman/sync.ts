@@ -44,11 +44,23 @@ export async function syncRentmanProjects() {
   let highestModified = state?.value;
 
   for (const subproject of subprojects) {
-    const mapped = mapToInternalProject(subproject);
-    await prisma.project.upsert({
-      where: { rentmanSubprojectId: mapped.rentmanSubprojectId },
-      update: mapped,
-      create: mapped,
+    const { rentmanSubprojectId, name, active, ...rentmanFields } = mapToInternalProject(subproject);
+    // Project (kernvelden) en ProjectRentmanLink (koppelvelden, §10.6) zijn
+    // sinds 27 aug 2026 losse tabellen -- upsert dus in twee stappen: eerst
+    // het Project zelf op naam/active, dan de koppelrij op rentmanSubprojectId.
+    const existingLink = await prisma.projectRentmanLink.findUnique({
+      where: { rentmanSubprojectId },
+      select: { projectId: true },
+    });
+    const project = await prisma.project.upsert({
+      where: { id: existingLink?.projectId ?? "" },
+      update: { name, active },
+      create: { name, active },
+    });
+    await prisma.projectRentmanLink.upsert({
+      where: { rentmanSubprojectId },
+      update: rentmanFields,
+      create: { rentmanSubprojectId, projectId: project.id, ...rentmanFields },
     });
 
     if (subproject.modified && (!highestModified || subproject.modified > highestModified)) {

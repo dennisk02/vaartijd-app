@@ -9,7 +9,10 @@ const roleLabels: Record<string, string> = { EMPLOYEE: "Medewerker", ADMIN: "Beh
 
 export default async function AdminUsersPage() {
   const currentUser = await requireAdminScope("USERS");
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "desc" } });
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { afasLink: { select: { afasEmployeeNumber: true } } },
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -26,8 +29,8 @@ export default async function AdminUsersPage() {
                 {user.name} <span className="text-slate-400">· {roleLabels[user.role]}</span>
               </p>
               <p className="text-sm text-slate-500">{user.email}</p>
-              {user.afasEmployeeNumber && (
-                <p className="text-xs text-slate-400">AFAS-nummer: {user.afasEmployeeNumber}</p>
+              {user.afasLink?.afasEmployeeNumber && (
+                <p className="text-xs text-slate-400">AFAS-nummer: {user.afasLink.afasEmployeeNumber}</p>
               )}
             </div>
             <div className="flex items-center gap-2">

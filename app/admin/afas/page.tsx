@@ -8,13 +8,16 @@ export default async function AdminAfasPage() {
   await requireAdminScope("AFAS");
   const configured = isAfasConfigured() && Boolean(process.env.AFAS_HOURS_CONNECTOR);
 
+  // afasSyncStatus staat sinds §10.6 in TimeEntryAfasLink; een ontbrekende
+  // link (zou na deze refactor niet meer moeten voorkomen) telt als "Wacht
+  // op sync", niet als afwezig.
   const [pending, synced, errored, errorEntries] = await Promise.all([
-    prisma.timeEntry.count({ where: { afasSyncStatus: "PENDING" } }),
-    prisma.timeEntry.count({ where: { afasSyncStatus: "SYNCED" } }),
-    prisma.timeEntry.count({ where: { afasSyncStatus: "ERROR" } }),
+    prisma.timeEntry.count({ where: { OR: [{ afasLink: null }, { afasLink: { syncStatus: "PENDING" } }] } }),
+    prisma.timeEntry.count({ where: { afasLink: { syncStatus: "SYNCED" } } }),
+    prisma.timeEntry.count({ where: { afasLink: { syncStatus: "ERROR" } } }),
     prisma.timeEntry.findMany({
-      where: { afasSyncStatus: "ERROR" },
-      include: { user: true, project: true },
+      where: { afasLink: { syncStatus: "ERROR" } },
+      include: { user: true, project: true, afasLink: true },
       orderBy: { updatedAt: "desc" },
       take: 20,
     }),
@@ -68,9 +71,9 @@ export default async function AdminAfasPage() {
                     {entry.date.toISOString().slice(0, 10)} · {Number(entry.hours)} uur
                   </p>
                 </div>
-                <SyncStatusBadge status={entry.afasSyncStatus} />
+                <SyncStatusBadge status={entry.afasLink?.syncStatus ?? "PENDING"} />
               </div>
-              {entry.afasError && <p className="mt-2 text-sm text-red-600">{entry.afasError}</p>}
+              {entry.afasLink?.error && <p className="mt-2 text-sm text-red-600">{entry.afasLink.error}</p>}
             </Card>
           ))}
         </div>

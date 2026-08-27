@@ -8,7 +8,13 @@ export default async function AdminProjectsPage() {
   await requireAdminScope("PROJECTS");
   const projects = await prisma.project.findMany({
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, active: true, afasProjectCode: true, rentmanSubprojectId: true },
+    select: {
+      id: true,
+      name: true,
+      active: true,
+      afasLink: { select: { afasProjectCode: true } },
+      rentmanLink: { select: { rentmanSubprojectId: true } },
+    },
   });
 
   return (
@@ -16,7 +22,15 @@ export default async function AdminProjectsPage() {
       <Card>
         <ProjectForm />
       </Card>
-      <ProjectList projects={projects} />
+      <ProjectList
+        projects={projects.map((p) => ({
+          id: p.id,
+          name: p.name,
+          active: p.active,
+          afasProjectCode: p.afasLink?.afasProjectCode ?? null,
+          rentmanSubprojectId: p.rentmanLink?.rentmanSubprojectId ?? null,
+        }))}
+      />
     </div>
   );
 }

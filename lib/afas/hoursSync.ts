@@ -3,9 +3,22 @@ import { prisma } from "@/lib/prisma";
 import { afasFetch, isAfasConfigured, AfasApiError } from "@/lib/afas/client";
 import type { Prisma } from "@prisma/client";
 
-type TimeEntryWithRelations = Prisma.TimeEntryGetPayload<{
-  include: { user: true; project: true };
-}>;
+/// Alleen de velden die de AFAS-payload echt nodig heeft -- sinds §10.6
+/// (27 aug 2026) staan afasEmployeeNumber/afasProjectCode niet meer op
+/// User/Project zelf maar in eigen koppeltabellen. Bewust een `select` i.p.v.
+/// `include: { user: true, project: true }` (de oude vorm haalde ongemerkt de
+/// volledige User-/Project-rij op, incl. bv. passwordHash) -- een losse
+/// dienst die deze module ooit overneemt (zie de ontkoppelingsinschatting)
+/// hoeft zo nooit meer dan deze twee velden te zien.
+const ENTRY_SELECT = {
+  id: true,
+  date: true,
+  hours: true,
+  user: { select: { afasLink: { select: { afasEmployeeNumber: true } } } },
+  project: { select: { afasLink: { select: { afasProjectCode: true } } } },
+} satisfies Prisma.TimeEntrySelect;
+
+type TimeEntryWithRelations = Prisma.TimeEntryGetPayload<{ select: typeof ENTRY_SELECT }>;
 
 /// Werksoort-/itemcode (ItCd) en boekingsstatus (StId) zijn in AFAS vaste,
 /// omgeving-specifieke codes -- niet per medewerker/project verschillend
@@ -30,76 +43,71 @@ const AFAS_STATUS_ID = process.env.AFAS_HOURS_STATUS_ID || "1";
  * projectveld komen de uren mogelijk helemaal niet, of op het verkeerde
  * project, in AFAS terecht.
  */
-function mapTimeEntryToAfas(entry: TimeEntryWithRelations) {
+function mapTimeEntryToAfas(entry: TimeEntryWithRelations, afasEmployeeNumber: string, afasProjectCode: string) {
   return {
     PtRealisationWeek: {
       Element: {
         Fields: {
-          EmId: entry.user.afasEmployeeNumber,
+          EmId: afasEmployeeNumber,
           DaTi: entry.date.toISOString().slice(0, 10),
           ItCd: AFAS_ITEM_CODE,
           StId: AFAS_STATUS_ID,
           QuD1: Number(entry.hours),
           // Onbevestigd veld -- zie toelichting hierboven.
-          PrId: entry.project.afasProjectCode,
+          PrId: afasProjectCode,
         },
       },
     },
   };
 }
 
-export async function syncTimeEntry(id: string) {
-  const entry = await prisma.timeEntry.findUnique({
-    where: { id },
-    include: { user: true, project: true },
+/// Schrijft naar TimeEntryAfasLink i.p.v. TimeEntry zelf (§10.6) -- `upsert`
+/// i.p.v. `update` omdat oudere rijen van vóór deze koppeltabel-splitsing
+/// (of een falende create-transactie) mogelijk geen linkrij hebben.
+async function updateAfasLink(timeEntryId: string, data: { syncStatus: "PENDING" | "SYNCED" | "ERROR"; syncedAt?: Date; error?: string | null }) {
+  await prisma.timeEntryAfasLink.upsert({
+    where: { timeEntryId },
+    update: data,
+    create: { timeEntryId, ...data },
   });
+}
+
+export async function syncTimeEntry(id: string) {
+  const entry = await prisma.timeEntry.findUnique({ where: { id }, select: ENTRY_SELECT });
   if (!entry) return;
 
   const connector = process.env.AFAS_HOURS_CONNECTOR;
 
   if (!isAfasConfigured() || !connector) {
-    await prisma.timeEntry.update({
-      where: { id },
-      data: { afasError: "AFAS-koppeling is nog niet geconfigureerd." },
-    });
+    await updateAfasLink(id, { syncStatus: "PENDING", error: "AFAS-koppeling is nog niet geconfigureerd." });
     return;
   }
 
-  if (!entry.user.afasEmployeeNumber) {
-    await prisma.timeEntry.update({
-      where: { id },
-      data: { afasSyncStatus: "ERROR", afasError: "Medewerker heeft geen AFAS-medewerkernummer." },
-    });
+  const afasEmployeeNumber = entry.user.afasLink?.afasEmployeeNumber;
+  if (!afasEmployeeNumber) {
+    await updateAfasLink(id, { syncStatus: "ERROR", error: "Medewerker heeft geen AFAS-medewerkernummer." });
     return;
   }
 
-  if (!entry.project.afasProjectCode) {
-    await prisma.timeEntry.update({
-      where: { id },
-      data: { afasSyncStatus: "ERROR", afasError: "Project heeft geen AFAS-projectcode." },
-    });
+  const afasProjectCode = entry.project.afasLink?.afasProjectCode;
+  if (!afasProjectCode) {
+    await updateAfasLink(id, { syncStatus: "ERROR", error: "Project heeft geen AFAS-projectcode." });
     return;
   }
 
   try {
-    const payload = mapTimeEntryToAfas(entry);
+    const payload = mapTimeEntryToAfas(entry, afasEmployeeNumber, afasProjectCode);
     await afasFetch(`connectors/${connector}`, { method: "POST", body: payload });
-    await prisma.timeEntry.update({
-      where: { id },
-      data: { afasSyncStatus: "SYNCED", afasSyncedAt: new Date(), afasError: null },
-    });
+    await updateAfasLink(id, { syncStatus: "SYNCED", syncedAt: new Date(), error: null });
   } catch (error) {
     const message = error instanceof AfasApiError ? error.message : "Onbekende fout bij synchroniseren met AFAS.";
-    await prisma.timeEntry.update({
-      where: { id },
-      data: { afasSyncStatus: "ERROR", afasError: message },
-    });
+    await updateAfasLink(id, { syncStatus: "ERROR", error: message });
   }
 }
 
 export async function syncPendingTimeEntries(limit = 50) {
   const pending = await prisma.timeEntry.findMany({
-    where: { afasSyncStatus: { in: ["PENDING", "ERROR"] } },
+    where: { OR: [{ afasLink: null }, { afasLink: { syncStatus: { in: ["PENDING", "ERROR"] } } }] },
     orderBy: { date: "asc" },
     take: limit,
     select: { id: true },

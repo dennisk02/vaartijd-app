@@ -12,9 +12,10 @@ export default async function AdminRentmanPage() {
   const [syncState, projects] = await Promise.all([
     getRentmanSyncState(),
     prisma.project.findMany({
-      where: { rentmanSubprojectId: { not: null } },
-      orderBy: { rentmanStartsAt: "desc" },
+      where: { rentmanLink: { isNot: null } },
+      orderBy: { rentmanLink: { rentmanStartsAt: "desc" } },
       take: 50,
+      include: { rentmanLink: true },
     }),
   ]);
 
@@ -51,13 +52,15 @@ export default async function AdminRentmanPage() {
             <div>
               <p className="font-medium">{project.name}</p>
               <p className="text-sm text-slate-500">
-                {project.rentmanProjectNumber ? `${project.rentmanProjectNumber} · ` : ""}
-                {project.rentmanProjectName ?? ""}
+                {project.rentmanLink?.rentmanProjectNumber ? `${project.rentmanLink.rentmanProjectNumber} · ` : ""}
+                {project.rentmanLink?.rentmanProjectName ?? ""}
               </p>
-              {project.rentmanStartsAt && (
+              {project.rentmanLink?.rentmanStartsAt && (
                 <p className="text-xs text-slate-400">
-                  {new Date(project.rentmanStartsAt).toLocaleDateString("nl-NL")}
-                  {project.rentmanEndsAt ? ` - ${new Date(project.rentmanEndsAt).toLocaleDateString("nl-NL")}` : ""}
+                  {new Date(project.rentmanLink.rentmanStartsAt).toLocaleDateString("nl-NL")}
+                  {project.rentmanLink.rentmanEndsAt
+                    ? ` - ${new Date(project.rentmanLink.rentmanEndsAt).toLocaleDateString("nl-NL")}`
+                    : ""}
                 </p>
               )}
             </div>
@@ -67,7 +70,7 @@ export default async function AdminRentmanPage() {
                   project.active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
                 }`}
               >
-                {project.rentmanStatus ?? (project.active ? "Actief" : "Inactief")}
+                {project.rentmanLink?.rentmanStatus ?? (project.active ? "Actief" : "Inactief")}
               </span>
             </div>
           </Card>

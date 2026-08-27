@@ -29,12 +29,13 @@ export default async function UserAssignmentsPage({ params }: { params: Promise<
       include: {
         assignedProjects: { select: { id: true } },
         assignedShips: { select: { id: true } },
+        shiftbaseLink: { select: { shiftbaseEmployeeId: true } },
       },
     }),
     prisma.project.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, rentmanProjectNumber: true },
+      select: { id: true, name: true, rentmanLink: { select: { rentmanProjectNumber: true } } },
     }),
     prisma.ship.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
@@ -79,7 +80,7 @@ export default async function UserAssignmentsPage({ params }: { params: Promise<
               name="projectIds"
               items={projects.map((p) => ({
                 id: p.id,
-                label: p.rentmanProjectNumber ? `${p.rentmanProjectNumber} · ${p.name}` : p.name,
+                label: p.rentmanLink?.rentmanProjectNumber ? `${p.rentmanLink.rentmanProjectNumber} · ${p.name}` : p.name,
               }))}
               defaultCheckedIds={user.assignedProjects.map((p) => p.id)}
               searchPlaceholder="Zoek op naam of nummer..."
@@ -140,7 +141,7 @@ export default async function UserAssignmentsPage({ params }: { params: Promise<
             </p>
             <div className="flex flex-col gap-3">
               <DefaultProjectPicker
-                projects={projects.map((p) => ({ id: p.id, name: p.name, number: p.rentmanProjectNumber }))}
+                projects={projects.map((p) => ({ id: p.id, name: p.name, number: p.rentmanLink?.rentmanProjectNumber ?? null }))}
                 defaultProjectId={user.defaultProjectId ?? ""}
               />
               <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -161,7 +162,7 @@ export default async function UserAssignmentsPage({ params }: { params: Promise<
               Medewerker-ID zoals gebruikt in Shiftbase, nodig om uren daarnaartoe te exporteren.
             </p>
             <Field label="Shiftbase medewerker-ID (optioneel)" htmlFor="shiftbaseEmployeeId">
-              <Input id="shiftbaseEmployeeId" name="shiftbaseEmployeeId" defaultValue={user.shiftbaseEmployeeId ?? ""} />
+              <Input id="shiftbaseEmployeeId" name="shiftbaseEmployeeId" defaultValue={user.shiftbaseLink?.shiftbaseEmployeeId ?? ""} />
             </Field>
           </div>
 

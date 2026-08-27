@@ -79,8 +79,6 @@ model User {
   email              String          @unique
   passwordHash       String
   role               Role            @default(EMPLOYEE)
-  afasEmployeeNumber String?
-  shiftbaseEmployeeId String?        @unique
   language           Language        @default(NL)
   active             Boolean         @default(true)
   canLogOccupancy    Boolean         @default(true)
@@ -111,12 +109,16 @@ model User {
   activeTimer        ActiveTimer?
   assignedProjects   Project[]       @relation("UserProjects")
   assignedShips      Ship[]          @relation("UserShips")
+
+  /// Integratiekoppelingen (§10.6) -- losgemaakt van dit kernmodel zodat
+  /// beheer van de koppeling geen toegang tot medewerkersgegevens vereist.
+  afasLink       UserAfasLink?
+  shiftbaseLink  UserShiftbaseLink?
 }
 
 model Project {
   id               String        @id @default(cuid())
   name             String
-  afasProjectCode  String?
   active           Boolean       @default(true)
   createdAt        DateTime      @default(now())
   timeEntries      TimeEntry[]
@@ -124,18 +126,14 @@ model Project {
   assignedUsers    User[]        @relation("UserProjects")
   defaultForUsers  User[]        @relation("UserDefaultProject")
 
-  /// Herkomst uit Rentman (read-only sync) -- null betekent handmatig aangemaakt.
-  rentmanSubprojectId String?    @unique
-  rentmanProjectNumber String?
-  rentmanProjectName   String?
-  rentmanStatus        String?
-  rentmanStartsAt      DateTime?
-  rentmanEndsAt        DateTime?
-
-  /// Automatisch aangemaakt "vaarbemanning"-project bij een Shiftbase-
-  /// afdeling (1 project per schip) -- zie lib/shiftbase/sync.ts. Null
-  /// betekent geen koppeling met Shiftbase.
-  shiftbaseDepartmentId String? @unique
+  /// Integratiekoppelingen (§10.6) -- precies één van de twee is gevuld voor
+  /// een gesyncte project (Rentman óf Shiftbase-vaarbemanning), of geen van
+  /// beide voor een handmatig aangemaakt project. `afasLink` staat hier los
+  /// van, want een project kan zowel Rentman-herkomst hebben als een eigen
+  /// AFAS-projectcode voor de urenexport.
+  rentmanLink    ProjectRentmanLink?
+  shiftbaseLink  ProjectShiftbaseLink?
+  afasLink       ProjectAfasLink?
 }
 
 model Ship {
@@ -152,13 +150,8 @@ model Ship {
   activeTimers  ActiveTimer[]
   assignedUsers User[]          @relation("UserShips")
 
-  /// Herkomst uit Shiftbase (read-only sync, "department" = schip in de
-  /// River Roots-vloot) -- null betekent handmatig aangemaakt. Nieuw
-  /// gesyncte schepen komen inactief binnen; een beheerder activeert de
-  /// daadwerkelijke boten (sommige Shiftbase-afdelingen zijn geen schip,
-  /// bv. "Kantoor"). Zie lib/shiftbase/sync.ts.
-  shiftbaseDepartmentId String? @unique
-  shiftbaseDepartmentName String?
+  /// Integratiekoppeling (§10.6) -- null betekent handmatig aangemaakt.
+  shiftbaseLink ShipShiftbaseLink?
 }
 
 model TimeEntry {
@@ -176,22 +169,19 @@ model TimeEntry {
   mode           TimeEntryMode @default(MANUAL)
   hours          Decimal       @db.Decimal(5, 2)
   description    String?
-  afasSyncStatus SyncStatus    @default(PENDING)
-  afasSyncedAt   DateTime?
-  afasError      String?
-  shiftbaseSyncStatus SyncStatus @default(PENDING)
-  shiftbaseSyncedAt   DateTime?
-  shiftbaseError      String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  /// Bij mode = SHIFTBASE_IMPORT: het bronrecord in Shiftbase (timesheet-id),
-  /// zodat een herhaalde import dezelfde rij bijwerkt i.p.v. dupliceert.
-  shiftbaseTimesheetId String? @unique
+  /// Integratiekoppelingen (§10.6). `shiftbaseImport` = herkomst (dit is een
+  /// geïmporteerde vaarbemanning-registratie); `afasLink`/`shiftbaseExport` =
+  /// bestemming (sync-status richting AFAS resp. Shiftbase). Bewust twee
+  /// aparte Shiftbase-modellen: import en export zijn onafhankelijke
+  /// richtingen die nooit dezelfde rij vullen.
+  afasLink         TimeEntryAfasLink?
+  shiftbaseImport  TimeEntryShiftbaseImport?
+  shiftbaseExport  TimeEntryShiftbaseExport?
 
   @@index([userId, date])
-  @@index([afasSyncStatus])
-  @@index([shiftbaseSyncStatus])
 }
 
 /// Kleine generieke sleutel/waarde-tabel voor sync-status (bv. laatste
@@ -277,6 +267,113 @@ model DaySubmission {
   createdAt   DateTime  @default(now())
 
   @@unique([userId, date])
+}
+
+// ---------------------------------------------------------------------------
+// §10.6 Integratiekoppelingen -- losgemaakt van User/Project/Ship/TimeEntry
+// (27 aug 2026) zodat de kernmodellen zelf geen Rentman/AFAS/Shiftbase-kennis
+// meer bevatten. Elke tabel is 1-op-1 met haar kernmodel; toegang tot deze
+// tabellen (voor onderhoud aan een koppeling) geeft geen toegang tot de rest
+// van User/Project/Ship/TimeEntry. Zie HANDOVER.md §10.6 voor de volledige
+// achtergrond en de bestanden die per koppeling lezen/schrijven.
+// ---------------------------------------------------------------------------
+
+/// Rentman-herkomst van een Project (read-only sync, lib/rentman/sync.ts).
+model ProjectRentmanLink {
+  id                   String    @id @default(cuid())
+  projectId            String    @unique
+  project              Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rentmanSubprojectId  String    @unique
+  rentmanProjectNumber String?
+  rentmanProjectName   String?
+  rentmanStatus        String?
+  rentmanStartsAt      DateTime?
+  rentmanEndsAt        DateTime?
+}
+
+/// AFAS-projectcode, handmatig ingesteld door een beheerder (voor de
+/// urenexport, lib/afas/hoursSync.ts) -- los van rentmanLink, want een
+/// Rentman-project kan best een eigen AFAS-code hebben.
+model ProjectAfasLink {
+  id              String  @id @default(cuid())
+  projectId       String  @unique
+  project         Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  afasProjectCode String
+}
+
+/// Automatisch aangemaakt "vaarbemanning"-project bij een Shiftbase-afdeling
+/// (1 project per schip, lib/shiftbase/sync.ts).
+model ProjectShiftbaseLink {
+  id                    String  @id @default(cuid())
+  projectId             String  @unique
+  project               Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  shiftbaseDepartmentId String  @unique
+}
+
+/// Shiftbase-herkomst van een Ship ("department" = schip in de River
+/// Roots-vloot, lib/shiftbase/sync.ts). Nieuw gesyncte schepen komen
+/// inactief binnen; een beheerder activeert de daadwerkelijke boten
+/// (sommige Shiftbase-afdelingen zijn geen schip, bv. "Kantoor").
+model ShipShiftbaseLink {
+  id                      String  @id @default(cuid())
+  shipId                  String  @unique
+  ship                    Ship    @relation(fields: [shipId], references: [id], onDelete: Cascade)
+  shiftbaseDepartmentId   String  @unique
+  shiftbaseDepartmentName String?
+}
+
+/// AFAS-medewerkernummer, handmatig ingesteld door een beheerder (voor de
+/// urenexport, lib/afas/hoursSync.ts).
+model UserAfasLink {
+  id                 String @id @default(cuid())
+  userId             String @unique
+  user               User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  afasEmployeeNumber String
+}
+
+/// Shiftbase-medewerker-ID -- gevuld bij de vaarbemanning-import
+/// (lib/shiftbase/sync.ts, `syncCrewUsers`), zodat een herhaalde import
+/// hetzelfde account bijwerkt i.p.v. dupliceert.
+model UserShiftbaseLink {
+  id                  String @id @default(cuid())
+  userId              String @unique
+  user                User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shiftbaseEmployeeId String @unique
+}
+
+/// Sync-status richting AFAS voor één TimeEntry (lib/afas/hoursSync.ts).
+model TimeEntryAfasLink {
+  id          String     @id @default(cuid())
+  timeEntryId String     @unique
+  timeEntry   TimeEntry  @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  syncStatus  SyncStatus @default(PENDING)
+  syncedAt    DateTime?
+  error       String?
+
+  @@index([syncStatus])
+}
+
+/// Herkomst-koppeling: dit TimeEntry is geïmporteerd uit Shiftbase
+/// (vaarbemanning-uren, lib/shiftbase/sync.ts `syncTimesheets`). Alleen
+/// gevuld bij mode = SHIFTBASE_IMPORT.
+model TimeEntryShiftbaseImport {
+  id          String    @id @default(cuid())
+  timeEntryId String    @unique
+  timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  timesheetId String    @unique
+}
+
+/// Sync-status richting Shiftbase voor één TimeEntry (lib/shiftbase/hoursSync.ts,
+/// de -- nog geblokkeerde/ongeverifieerde -- exportrichting, zie HANDOVER §10.3).
+model TimeEntryShiftbaseExport {
+  id          String     @id @default(cuid())
+  timeEntryId String     @unique
+  timeEntry   TimeEntry  @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  syncStatus  SyncStatus @default(PENDING)
+  syncedAt    DateTime?
+  error       String?
+
+  @@index([syncStatus])
 }
 
 // ---------------------------------------------------------------------------

@@ -11,19 +11,21 @@ export default async function AdminShiftbasePage() {
   const configured = isShiftbaseConfigured();
   const exportEnabled = isShiftbaseHoursExportEnabled();
 
+  // shiftbaseSyncStatus/shiftbaseDepartmentId/shiftbaseEmployeeId staan sinds
+  // §10.6 in eigen koppeltabellen.
   const [pending, synced, errored, errorEntries, shipsTotal, shipsActive, crewUsers, crewHours] = await Promise.all([
-    prisma.timeEntry.count({ where: { shiftbaseSyncStatus: "PENDING" } }),
-    prisma.timeEntry.count({ where: { shiftbaseSyncStatus: "SYNCED" } }),
-    prisma.timeEntry.count({ where: { shiftbaseSyncStatus: "ERROR" } }),
+    prisma.timeEntry.count({ where: { OR: [{ shiftbaseExport: null }, { shiftbaseExport: { syncStatus: "PENDING" } }] } }),
+    prisma.timeEntry.count({ where: { shiftbaseExport: { syncStatus: "SYNCED" } } }),
+    prisma.timeEntry.count({ where: { shiftbaseExport: { syncStatus: "ERROR" } } }),
     prisma.timeEntry.findMany({
-      where: { shiftbaseSyncStatus: "ERROR" },
-      include: { user: true, project: true },
+      where: { shiftbaseExport: { syncStatus: "ERROR" } },
+      include: { user: true, project: true, shiftbaseExport: true },
       orderBy: { updatedAt: "desc" },
       take: 20,
     }),
-    prisma.ship.count({ where: { shiftbaseDepartmentId: { not: null } } }),
-    prisma.ship.count({ where: { shiftbaseDepartmentId: { not: null }, active: true } }),
-    prisma.user.count({ where: { shiftbaseEmployeeId: { not: null } } }),
+    prisma.ship.count({ where: { shiftbaseLink: { isNot: null } } }),
+    prisma.ship.count({ where: { shiftbaseLink: { isNot: null }, active: true } }),
+    prisma.user.count({ where: { shiftbaseLink: { isNot: null } } }),
     prisma.timeEntry.count({ where: { mode: "SHIFTBASE_IMPORT" } }),
   ]);
 
@@ -115,9 +117,9 @@ export default async function AdminShiftbasePage() {
                     {entry.date.toISOString().slice(0, 10)} · {Number(entry.hours)} uur
                   </p>
                 </div>
-                <SyncStatusBadge status={entry.shiftbaseSyncStatus} />
+                <SyncStatusBadge status={entry.shiftbaseExport?.syncStatus ?? "PENDING"} />
               </div>
-              {entry.shiftbaseError && <p className="mt-2 text-sm text-red-600">{entry.shiftbaseError}</p>}
+              {entry.shiftbaseExport?.error && <p className="mt-2 text-sm text-red-600">{entry.shiftbaseExport.error}</p>}
             </Card>
           ))}
         </div>

@@ -78,6 +78,10 @@ export async function createTimeEntry(
       mode: "MANUAL",
       hours,
       description: description || null,
+      // Elke registratie start op PENDING richting zowel AFAS als Shiftbase
+      // (§10.6) -- ongeacht of die koppeling al actief geconfigureerd is.
+      afasLink: { create: {} },
+      shiftbaseExport: { create: {} },
     },
   });
 
@@ -89,8 +93,15 @@ export async function createTimeEntry(
 export async function deleteTimeEntry(id: string) {
   const user = await getUser();
 
+  // Al naar AFAS geëxporteerde uren mogen niet meer verwijderd worden --
+  // afasLink ontbreekt (nog nooit geprobeerd te syncen) of heeft een status
+  // anders dan SYNCED. Zie lib/afas/hoursSync.ts (§10.6).
   await prisma.timeEntry.deleteMany({
-    where: { id, userId: user.id, afasSyncStatus: { not: "SYNCED" } },
+    where: {
+      id,
+      userId: user.id,
+      OR: [{ afasLink: null }, { afasLink: { syncStatus: { not: "SYNCED" } } }],
+    },
   });
 
   revalidatePath("/uren");

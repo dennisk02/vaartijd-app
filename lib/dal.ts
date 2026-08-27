@@ -23,7 +23,6 @@ export const getUser = cache(async () => {
       name: true,
       email: true,
       role: true,
-      afasEmployeeNumber: true,
       language: true,
       active: true,
       canLogOccupancy: true,

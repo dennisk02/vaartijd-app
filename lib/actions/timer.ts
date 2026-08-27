@@ -51,6 +51,10 @@ export async function stopTimer(breakMinutes: number) {
         breakMinutes: Math.max(0, breakMinutes),
         mode: "TIMER",
         hours,
+        // Elke registratie start op PENDING richting zowel AFAS als
+        // Shiftbase (§10.6) -- ongeacht of die koppeling al actief is.
+        afasLink: { create: {} },
+        shiftbaseExport: { create: {} },
       },
     }),
     prisma.activeTimer.delete({ where: { userId: user.id } }),
