@@ -406,29 +406,28 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
     op `rest` met een waarschuwing, niet gefabriceerd). **Dit was de daadwerkelijke oorzaak** van
     de hieronder beschreven `unauthorized_client`-fout, niet een AFAS-zijdig connector-probleem
     zoals aanvankelijk gedacht.
-  - **Nu voorbij de authenticatie, nieuwe (kleinere) blokkade (27 aug 2026):** met de juiste
-    hostname slaagt de OAuth-token-aanvraag. De daaropvolgende aanroep
-    (`metainfo/update/PtRealisation`, via `testAfasConnection()`) geeft nu een andere fout:
-    `HTTP 500` — `"Deze connector wordt niet ondersteund of de gebruiker is niet geautoriseerd."`
-    (`errorNumber: -2146233088`). Dit wijst erop dat de **`PtRealisation`-UpdateConnector
-    specifiek** nog niet is geautoriseerd voor de gebruikersgroep van de "Skrepr"-App Connector
-    (in het screenshot: "Externe toegang: connector gebruikers (Profit) (36369.Skrepr)") — navragen
-    bij Willem van Melis of dat expliciet toegevoegd kan worden aan de rechten van die
-    gebruikersgroep in AFAS Profit.
-- **Connector- en veldnamen bevestigd, twee waarden nog onzeker:** Royaal stuurde een werkend
-  voorbeeld van de `PtRealisation`-UpdateConnector (envelop `PtRealisationWeek`/`Element`/
-  `Fields`, velden `EmId`/`DaTi`/`ItCd`/`StId`/`QuD1`). `mapTimeEntryToAfas()` in
-  `integrations/afas/hoursSync.ts` gebruikt deze exacte veldnamen. **Twee dingen zijn nog niet
-  bevestigd:**
-  1. Het **projectveld** (`PrId`) ontbrak in het aangeleverde voorbeeld — waarschijnlijk
-     afgesneden bij het kopiëren van het scherm, `PrId` is de gangbare AFAS-conventie voor dit
-     type connector, maar dit is een aanname totdat een echte testboeking het bevestigt.
-  2. De **waarden** voor `ItCd` (werksoort-/itemcode, fallback `"300"`) en `StId`
-     (boekingsstatus, fallback `"1"`) — overgenomen uit Royaal's voorbeeld-e-mail, mogelijk een
-     generiek sjabloon i.p.v. de daadwerkelijke code voor déze administratie. Aanpasbaar via
-     `AFAS_HOURS_ITEM_CODE`/`AFAS_HOURS_STATUS_ID` zonder codewijziging.
+  - **Verkeerde connectornaam, opgelost (27 aug 2026):** met de juiste hostname slaagt de
+    OAuth-token-aanvraag, maar `metainfo/update/PtRealisation` gaf een schijnbaar AFAS-zijdige
+    autorisatiefout (`HTTP 500`, `"Deze connector wordt niet ondersteund of de gebruiker is niet
+    geautoriseerd."`). Het eigen, alleen-lezende `metainfo`-endpoint van AFAS (zonder
+    connectornaam erbij) laat precies zien welke connectors "Skrepr" mag gebruiken — en dat is
+    **`PtRealization`** (Amerikaanse spelling), niet `PtRealisation` (Brits, wat Royaal's
+    e-mail en dus ook onze env-variabele gebruikte). Dat verklaarde de fout volledig; geen
+    AFAS-zijdig autorisatieprobleem. `AFAS_HOURS_CONNECTOR` staat nu op `PtRealization`.
+  - **Veldnamen nu rechtstreeks bevestigd via AFAS zelf, niet meer via een aangeleverd
+    voorbeeld:** `metainfo/update/PtRealization` (hetzelfde endpoint als hierboven, dit keer mét
+    connectornaam) geeft de **volledige, geautoriseerde velden-definitie** van deze connector
+    terug — inclusief welke velden verplicht zijn. Dat bracht twee echte fouten in de eerdere
+    `mapTimeEntryToAfas()` aan het licht: het aantal-uren-veld heet **`Qu`**, niet `QuD1` (dat
+    veld bestaat niet eens in deze connector); en **`VaIt`** ("Type item") is verplicht en
+    ontbrak volledig (`"1"` = Werksoort, de juiste waarde voor gewerkte uren). `PrId` (Project)
+    en `StId` (Urensoort) bleken wél te kloppen met de eerdere aanname. Als bonus zijn ook
+    `StTi`/`EnTi` (begin-/eindtijd) nu meegenomen, want de connector ondersteunt ze en
+    `TimeEntry` heeft de data al. **Nog steeds niet bevestigd:** de exacte *waarden* voor `ItCd`
+    (itemcode) en `StId` (urensoort) voor déze administratie — de veldnamen zijn nu zeker, de
+    codes zelf (fallback `"300"`/`"1"`) nog niet.
 - Env vars: `AFAS_ENVIRONMENT_ID`, `AFAS_OAUTH_CLIENT_ID`, `AFAS_OAUTH_CLIENT_SECRET`,
-  `AFAS_HOURS_CONNECTOR` (standaard `PtRealisation`), optioneel `AFAS_HOURS_ITEM_CODE`/
+  `AFAS_HOURS_CONNECTOR` (`PtRealization`), optioneel `AFAS_HOURS_ITEM_CODE`/
   `AFAS_HOURS_STATUS_ID`, `AFAS_SYNC_SECRET`. Zolang Client ID/Secret ontbreken degradeert de
   app gracieus: uren blijven op `afasSyncStatus = PENDING` staan, er gebeurt verder niets.
 - Trigger: `/admin/afas` (handmatig) of `POST/GET /api/afas/sync` (extern, met
@@ -968,15 +967,19 @@ zijn.
 
 Gesorteerd op vermoedelijke prioriteit voor de klant:
 
-1. **AFAS-koppeling voor uren: authenticatie werkt nu, PtRealisation-connector nog niet
-   geautoriseerd** — de eerdere `unauthorized_client`-fout bleek het gebruik van de verkeerde
-   REST-hostname (`rest` i.p.v. `resttest` voor deze Test-omgeving, opgelost 27 aug 2026 — zie
-   §10.1). De OAuth-authenticatie slaagt nu; de connectoraanroep zelf geeft nog
-   `"Deze connector wordt niet ondersteund of de gebruiker is niet geautoriseerd."` — navragen
-   bij Willem van Melis of de `PtRealisation`-UpdateConnector is toegevoegd aan de rechten van de
-   "Skrepr"-gebruikersgroep in AFAS Profit. Ook nog te bevestigen zodra dat werkt: `PrId`
-   (projectveld, aanname) en de `ItCd`/`StId`-waarden (mogelijk generieke voorbeeldwaarden). Voor
-   het nieuwe verkoopfacturen-plan (AFAS-kant) is nog niets afgestemd. Zie §10.1 en §10.4.
+1. ~~AFAS-koppeling voor uren: authenticatie/autorisatie geblokkeerd~~ — **opgelost 27 aug
+   2026:** zowel de hostname (`rest` → `resttest`) als de connectornaam (`PtRealisation` →
+   `PtRealization`, Amerikaanse spelling) waren fout; AFAS' eigen `metainfo`-endpoint bevestigde
+   dit en gaf er meteen de volledige velden-definitie bij, wat ook twee veldfouten in de payload
+   aan het licht bracht (`Qu` i.p.v. `QuD1`, verplicht `VaIt` ontbrak). Zie §10.1. **Nog niet
+   bevestigd:** de exacte *waarden* voor `ItCd`/`StId` voor déze administratie (fallback
+   `"300"`/`"1"`) — pas te checken met een echte testboeking. Voor het verkoopfacturen-plan
+   (AFAS-kant, §10.4) is nog niets afgestemd, en het **project-aanmaken bij een bevestigde
+   Rentman-offerte** (de eerste prioriteitskoppeling uit de ontkoppelingsinschatting) is
+   **geblokkeerd**: `metainfo` (zonder connectornaam) toont alle voor "Skrepr" geautoriseerde
+   connectors, en daar zit geen enkele UpdateConnector voor het aanmaken van projecten tussen
+   (alleen `PtRealization` voor uren) — Willem moet zo'n connector eerst aanmaken en autoriseren
+   voordat die koppeling gebouwd kan worden.
 2. **Rentman → AFAS verkoopfacturen + PDF-bijlage + betaal-terugkoppeling** — plan is met de
    klant besproken en de Rentman-kant is technisch geverifieerd (MCP), maar er is nog geen
    regel code voor geschreven. Zie §10.4 voor de volledige stand van zaken.

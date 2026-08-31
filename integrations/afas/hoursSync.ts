@@ -14,34 +14,41 @@ const ENTRY_SELECT = {
   id: true,
   date: true,
   hours: true,
+  startTime: true,
+  endTime: true,
   user: { select: { afasLink: { select: { afasEmployeeNumber: true } } } },
   project: { select: { afasLink: { select: { afasProjectCode: true } } } },
 } satisfies Prisma.TimeEntrySelect;
 
 type TimeEntryWithRelations = Prisma.TimeEntryGetPayload<{ select: typeof ENTRY_SELECT }>;
 
-/// Werksoort-/itemcode (ItCd) en boekingsstatus (StId) zijn in AFAS vaste,
+/// Werksoort-/itemcode (ItCd) en urensoort (StId) zijn in AFAS vaste,
 /// omgeving-specifieke codes -- niet per medewerker/project verschillend
 /// voor deze eenvoudige urenregistratie. Ingesteld via env i.p.v.
 /// hardcoded, zodat ze zonder codewijziging aan te passen zijn zodra
 /// Royaal/Willem van Melis de definitieve waarden bevestigt (het "300"/"1"
 /// uit hun voorbeeld-e-mail was mogelijk een generiek sjabloonvoorbeeld,
-/// niet per se de daadwerkelijke code voor Kuipers Beheer BV).
+/// niet per se de daadwerkelijke code voor Kuipers Beheer BV) -- de
+/// veldnamen zelf (ItCd/StId) zijn inmiddels wel bevestigd, zie hieronder.
 const AFAS_ITEM_CODE = process.env.AFAS_HOURS_ITEM_CODE || "300";
 const AFAS_STATUS_ID = process.env.AFAS_HOURS_STATUS_ID || "1";
 
 /**
- * Bouwt de payload voor de AFAS PtRealisation-UpdateConnector (bevestigd
- * door Royaal/Willem van Melis, 24 aug 2026 -- zie HANDOVER.md §10.1).
+ * Bouwt de payload voor de AFAS PtRealization-UpdateConnector.
  *
- * LET OP -- `PrId` (projectnummer) is een AANNAME, gebaseerd op de
- * gangbare AFAS-conventie voor dit type connector: het ontbrak in het
- * door Royaal aangeleverde velden-voorbeeld (mogelijk afgesneden bij het
- * kopiëren van het scherm). Dit MOET geverifieerd worden met een
- * testaanroep (bv. via `testAfasConnection()` of één losse echte boeking)
- * vóórdat hier structureel op vertrouwd wordt -- zonder het juiste
- * projectveld komen de uren mogelijk helemaal niet, of op het verkeerde
- * project, in AFAS terecht.
+ * Velden + verplichtheid rechtstreeks bevestigd via AFAS' eigen
+ * `metainfo/update/PtRealization`-endpoint (27 aug 2026, zie HANDOVER.md
+ * §10.1) -- niet langer een aanname op basis van Royaals voorbeeld-e-mail.
+ * Die live-metadata bracht twee echte fouten aan het licht t.o.v. de
+ * eerdere versie van deze functie:
+ * - Het aantal-uren-veld heet `Qu` ("Aantal"), niet `QuD1` (dat veld bestaat
+ *   niet eens in deze connector).
+ * - `VaIt` ("Type item") is verplicht en ontbrak volledig -- "1" = Werksoort,
+ *   de juiste waarde voor gewerkte uren (zie de enum in de metadata).
+ * `PrId` (Project) en `StId` (Urensoort) bleken wel exact te kloppen met de
+ * aanname. `ItCd`/`StId` blijven configureerbare env-waarden (zie boven) --
+ * alleen de veldnamen zijn nu bevestigd, niet de exacte codes voor deze
+ * administratie.
  */
 function mapTimeEntryToAfas(entry: TimeEntryWithRelations, afasEmployeeNumber: string, afasProjectCode: string) {
   return {
@@ -50,11 +57,13 @@ function mapTimeEntryToAfas(entry: TimeEntryWithRelations, afasEmployeeNumber: s
         Fields: {
           EmId: afasEmployeeNumber,
           DaTi: entry.date.toISOString().slice(0, 10),
+          VaIt: "1", // Werksoort -- verplicht, bevestigd via metainfo.
           ItCd: AFAS_ITEM_CODE,
           StId: AFAS_STATUS_ID,
-          QuD1: Number(entry.hours),
-          // Onbevestigd veld -- zie toelichting hierboven.
+          Qu: Number(entry.hours),
           PrId: afasProjectCode,
+          ...(entry.startTime ? { StTi: entry.startTime.toISOString() } : {}),
+          ...(entry.endTime ? { EnTi: entry.endTime.toISOString() } : {}),
         },
       },
     },
