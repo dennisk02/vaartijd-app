@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdminScope } from "@/lib/dal";
-import { Card } from "@/components/ui";
-import { ProjectForm } from "@/components/admin/project-form";
 import { ProjectList } from "@/components/admin/project-list";
 
+/** Projecten worden niet meer handmatig aangemaakt -- ze komen altijd uit
+ * Rentman (/admin/rentman) of de Shiftbase-vaarbemanning-import
+ * (/admin/shiftbase). Dit scherm is puur overzicht: (de)activeren en de
+ * AFAS-projectcode instellen voor de urenexport. */
 export default async function AdminProjectsPage() {
   await requireAdminScope("PROJECTS");
   const projects = await prisma.project.findMany({
@@ -19,9 +21,6 @@ export default async function AdminProjectsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <ProjectForm />
-      </Card>
       <ProjectList
         projects={projects.map((p) => ({
           id: p.id,

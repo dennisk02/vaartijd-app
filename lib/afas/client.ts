@@ -16,15 +16,37 @@ type AfasConfig = {
   /** Ruwe omgevingscode zoals ingevuld, bv. "T36369AA" (voor logging). */
   environmentCode: string;
   /** Alleen de cijfers uit de omgevingscode -- dát is wat AFAS in de
-   * REST-hostname verwacht (`<cijfers>.rest.afas.online`), niet de volledige
-   * code met voorvoegsel/suffix. Ontdekt via live DNS-onderzoek: het
-   * voorvoegsel geeft het omgevingstype aan (O=Productie, T=Test,
-   * A=Acceptatie) en telt niet mee in de hostnaam. */
+   * REST-hostname verwacht (`<cijfers>.<resthost>.afas.online`), niet de
+   * volledige code met voorvoegsel/suffix. Het voorvoegsel geeft het
+   * omgevingstype aan (O=Productie, T=Test, A=Acceptatie) en telt niet mee
+   * in de hostnaam zelf -- het bepaalt wél wélk deel van de hostnaam
+   * (`rest`/`resttest`/...) gebruikt moet worden, zie `restHost`. */
   environmentNumber: string;
+  /** Het hostname-segment vóór ".afas.online" -- verschilt per
+   * omgevingstype. Bevestigd via AFAS' eigen testtool (connect.afas.nl/
+   * tools/restget), die voor een Test-omgeving (T-voorvoegsel) een cURL-
+   * voorbeeld met `resttest.afas.online` toont i.p.v. het (Productie-)
+   * `rest.afas.online` dat hier eerder altijd werd gebruikt -- dat verschil
+   * was de daadwerkelijke oorzaak van de aanhoudende "Unknown AppConnector"-
+   * fout (27 aug 2026, na live vergelijking met een screenshot van die tool).
+   * Alleen O en T zijn op deze manier bevestigd; A/overige voorvoegsels
+   * vallen terug op "rest" met een waarschuwing, niet gefabriceerd. */
+  restHost: string;
   clientId: string;
   clientSecret: string;
   baseUrl: string;
 };
+
+function restHostFor(envType: string): string {
+  if (envType === "O") return "rest";
+  if (envType === "T") return "resttest";
+  console.warn(
+    `AFAS-omgevingsvoorvoegsel "${envType}" heeft geen bevestigde REST-hostnaam (alleen O->rest en T->resttest ` +
+      `zijn bevestigd via connect.afas.nl/tools/restget) -- valt terug op "rest", controleer dit expliciet als de ` +
+      `verbinding faalt.`
+  );
+  return "rest";
+}
 
 function getAfasConfig(): AfasConfig | null {
   const environmentCode = process.env.AFAS_ENVIRONMENT_ID;
@@ -45,9 +67,10 @@ function getAfasConfig(): AfasConfig | null {
         `verwacht "O"). Uren komen dus niet in de echte AFAS-boekhouding terecht.`
     );
   }
+  const restHost = restHostFor(envType);
 
-  const baseUrl = process.env.AFAS_BASE_URL || `https://${environmentNumber}.rest.afas.online/profitrestservices`;
-  return { environmentCode, environmentNumber, clientId, clientSecret, baseUrl };
+  const baseUrl = process.env.AFAS_BASE_URL || `https://${environmentNumber}.${restHost}.afas.online/profitrestservices`;
+  return { environmentCode, environmentNumber, restHost, clientId, clientSecret, baseUrl };
 }
 
 export function isAfasConfigured() {
@@ -76,7 +99,7 @@ async function getAccessToken(config: AfasConfig): Promise<string> {
     return cachedToken.token;
   }
 
-  const tokenUrl = `https://${config.environmentNumber}.rest.afas.online/profitrestservices/oauth/token`;
+  const tokenUrl = `https://${config.environmentNumber}.${config.restHost}.afas.online/profitrestservices/oauth/token`;
   const response = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },

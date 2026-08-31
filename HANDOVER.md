@@ -325,10 +325,10 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
 | Pagina | Onderdeel (`AdminScope`) | Doel |
 |---|---|---|
 | `/admin/rapportages` | `RAPPORTAGES` | 4 grafieken (uren, bezetting, maaltijden, afval) met periodekeuze |
-| `/admin/projects` | `PROJECTS` | Projecten aanmaken/(de)activeren, doorzoekbare lijst |
-| `/admin/ships` | `SHIPS` | Schepen aanmaken/(de)activeren, incl. capaciteit |
+| `/admin/projects` | `PROJECTS` | Overzicht + (de)activeren + AFAS-projectcode instellen, doorzoekbare lijst — **geen aanmaakformulier meer** (27 aug 2026): projecten komen altijd via Rentman of Shiftbase binnen |
+| `/admin/ships` | `SHIPS` | Overzicht + (de)activeren — **geen aanmaakformulier meer** (27 aug 2026): schepen komen altijd via Shiftbase binnen, en komen sinds die datum al direct actief binnen |
 | `/admin/users` → `/admin/users/[id]` | `USERS` | Medewerkers aanmaken (**volledige beheerders only**); per medewerker: projectgroep, specifieke project-/scheepstoewijzing (doorzoekbaar), zichtbare onderdelen, vast project, Shiftbase-ID, admin-scopes (**volledige beheerders only**), 2FA resetten (**volledige beheerders only**) |
-| `/admin/rentman` | `RENTMAN` | Rentman-syncstatus, handmatige sync-trigger, lijst laatst-gesyncte projecten |
+| `/admin/rentman` | `RENTMAN` | Rentman-syncstatus, handmatige sync-trigger, **tabelweergave** (27 aug 2026, was een kaartenlijst) van alle gesyncte projecten met zoekveld + statusfilter |
 | `/admin/rentman-financieel` | `RENTMAN_FINANCIEEL` | Financieel dashboard, zie §10.5 |
 | `/admin/afas` | `AFAS` | AFAS-syncstatus (pending/synced/error-tellingen + foutmeldingen) |
 | `/admin/shiftbase` | `SHIFTBASE` | Vaarbemanning-import (River Roots, werkend) + read-only API-verkenner + (ongeverifieerde, geblokkeerde) urenexport-status |
@@ -381,22 +381,33 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
   in-memory gecached per serverinstance. Live geverifieerd (24 aug 2026): dit request-formaat
   wordt door AFAS geaccepteerd (een echte, betekenisvolle foutrespons kwam terug, geen
   transport-/formaatfout — zie hieronder).
-  - **Omgevingscode vs. omgevingsnummer (live ontdekte valkuil, opgelost):** `AFAS_ENVIRONMENT_ID`
-    bevat de volledige AFAS-omgevingscode zoals in de inlog-URL (bv. `T36369AA` — voorvoegsel
+  - **Omgevingscode vs. omgevingsnummer:** `AFAS_ENVIRONMENT_ID` bevat de volledige
+    AFAS-omgevingscode zoals in de inlog-URL (bv. `T36369AA` — voorvoegsel
     `O`=Productie/`T`=Test/`A`=Acceptatie, gevolgd door het eigenlijke omgevingsnummer, gevolgd
-    door een suffix). De REST-hostname gebruikt **alleen de cijfers** uit die code
-    (`36369.rest.afas.online`), niet de volledige code met voorvoegsel/suffix — een eerste
-    poging met de volledige code gaf domeinnamen die helemaal niet bestonden (DNS-fout). `getAfasConfig()`
-    haalt dit nu zelf uit elkaar (`environmentNumber = environmentCode.replace(/\D/g, "")`).
-    **Let op:** een `T`-voorvoegsel betekent een Test-omgeving — `getAfasConfig()` logt een
-    waarschuwing als het voorvoegsel niet `O` (Productie) is, want dan komen uren niet in de
-    echte AFAS-boekhouding terecht.
-  - **Openstaande blokkade (24 aug 2026):** met de juiste hostname bevestigd reageert AFAS'
-    token-endpoint met `401`/`{"error":"unauthorized_client","error_description":"Unknown
-    AppConnector or AppConnector not enabled"}`. Dit is een AFAS-zijdig configuratieprobleem,
-    geen codefout hier — waarschijnlijk moet de "Skrepr"-App Connector nog geactiveerd worden
-    in AFAS Profit, of de Client ID/Secret in `.env` komt niet exact overeen met wat Royaal heeft
-    aangemaakt. Navragen bij Willem van Melis/Royaal voordat verder getest kan worden.
+    door een suffix). De REST-hostname gebruikt **alleen de cijfers** uit die code, niet de
+    volledige code met voorvoegsel/suffix. `getAfasConfig()` haalt dit zelf uit elkaar
+    (`environmentNumber = environmentCode.replace(/\D/g, "")`).
+  - **Hostname-segment verschilt per omgevingstype (live ontdekte valkuil, opgelost 27 aug
+    2026):** het voorvoegsel bepaalt niet alleen het omgevingstype voor logging, maar ook **welk
+    hostname-segment** gebruikt moet worden — `O` (Productie) → `rest.afas.online`, `T` (Test) →
+    **`resttest.afas.online`**. Dit was aanvankelijk altijd hardcoded op `rest.afas.online`,
+    ongeacht omgevingstype — voor deze Test-omgeving (`T36369AA`) leidde dat tot aankloppen bij de
+    verkeerde (Productie-)hostnaam. Ontdekt door een cURL-voorbeeld te vergelijken op AFAS' eigen
+    testtool (`connect.afas.nl/tools/restget`, door de klant zelf ingevuld en gedeeld als
+    screenshot), dat expliciet `resttest.afas.online` toonde. `restHostFor()` in
+    `lib/afas/client.ts` regelt dit nu (alleen `O`/`T` bevestigd; andere voorvoegsels vallen terug
+    op `rest` met een waarschuwing, niet gefabriceerd). **Dit was de daadwerkelijke oorzaak** van
+    de hieronder beschreven `unauthorized_client`-fout, niet een AFAS-zijdig connector-probleem
+    zoals aanvankelijk gedacht.
+  - **Nu voorbij de authenticatie, nieuwe (kleinere) blokkade (27 aug 2026):** met de juiste
+    hostname slaagt de OAuth-token-aanvraag. De daaropvolgende aanroep
+    (`metainfo/update/PtRealisation`, via `testAfasConnection()`) geeft nu een andere fout:
+    `HTTP 500` — `"Deze connector wordt niet ondersteund of de gebruiker is niet geautoriseerd."`
+    (`errorNumber: -2146233088`). Dit wijst erop dat de **`PtRealisation`-UpdateConnector
+    specifiek** nog niet is geautoriseerd voor de gebruikersgroep van de "Skrepr"-App Connector
+    (in het screenshot: "Externe toegang: connector gebruikers (Profit) (36369.Skrepr)") — navragen
+    bij Willem van Melis of dat expliciet toegevoegd kan worden aan de rechten van die
+    gebruikersgroep in AFAS Profit.
 - **Connector- en veldnamen bevestigd, twee waarden nog onzeker:** Royaal stuurde een werkend
   voorbeeld van de `PtRealisation`-UpdateConnector (envelop `PtRealisationWeek`/`Element`/
   `Fields`, velden `EmId`/`DaTi`/`ItCd`/`StId`/`QuD1`). `mapTimeEntryToAfas()` in
@@ -477,14 +488,15 @@ niets met elkaar te maken hebben:
 Leest (alleen lezend) Shiftbase-departments, -gebruikers en goedgekeurde uren van de laatste 35
 dagen in, en legt ze vast in Vaartijd:
 
-- Elke Shiftbase-**department** → een `Ship` (`Ship.shiftbaseDepartmentId`, uniek) **plus** een
-  bijbehorend `Project` genaamd `"Vaarbemanning <departmentnaam>"`
-  (`Project.shiftbaseDepartmentId`, uniek) -- dat project ontvangt de uren, want `TimeEntry`
-  vereist altijd een `projectId`. Nieuw gesyncte schepen/projecten komen **inactief** binnen: er
-  is geen betrouwbare naamregel om een echt schip (bv. "Moods&Roots I (Krimpen)") te
-  onderscheiden van een niet-schip ("Kantoor", "Quality") -- een beheerder activeert zelf de
-  echte boten via de bestaande Schepen-/Projecten-beheerschermen (die hebben inmiddels ook een
-  zoekveld, zie eerdere sectie over invoer-UX).
+- Elke Shiftbase-**department** → een `Ship` (`ShipShiftbaseLink.shiftbaseDepartmentId`, uniek)
+  **plus** een bijbehorend `Project` genaamd `"Vaarbemanning <departmentnaam>"`
+  (`ProjectShiftbaseLink.shiftbaseDepartmentId`, uniek) -- dat project ontvangt de uren, want
+  `TimeEntry` vereist altijd een `projectId`. **Schepen komen sinds 27 aug 2026 direct actief
+  binnen** (op klantverzoek — voorheen inactief, omdat er geen betrouwbare naamregel is om een
+  echt schip (bv. "Moods&Roots I (Krimpen)") te onderscheiden van een niet-schip ("Kantoor",
+  "Quality"); de klant accepteert nu dat ook die laatste als "actief schip" verschijnen, in ruil
+  voor het schrappen van de handmatige review-stap). De bijbehorende "Vaarbemanning …"-projecten
+  komen nog wel **inactief** binnen (ongewijzigd) — activeren kan via `/admin/projects`.
 - Elke Shiftbase-**gebruiker** → een Vaartijd `User` (`User.shiftbaseEmployeeId`, uniek). Deze
   accounts zijn **niet bedoeld om mee in te loggen** (`active = false`, willekeurig
   wachtwoord dat nergens wordt vastgelegd) -- puur om uren aan te kunnen koppelen. Er wordt
@@ -927,14 +939,15 @@ zijn.
 
 Gesorteerd op vermoedelijke prioriteit voor de klant:
 
-1. **AFAS-koppeling voor uren: geblokkeerd op "Unknown AppConnector or AppConnector not
-   enabled"** — Royaal heeft de `PtRealisation`-connector + OAuth-gegevens aangeleverd
-   (24 aug 2026), de REST-hostname/omgevingsnummer-valkuil is gevonden en opgelost, maar het
-   OAuth-token-endpoint wijst de huidige Client ID/Secret af. Navragen bij Willem van Melis of
-   de "Skrepr"-App Connector geactiveerd is in AFAS Profit. Ook nog te bevestigen zodra dat werkt:
-   `PrId` (projectveld, aanname) en de `ItCd`/`StId`-waarden (mogelijk generieke
-   voorbeeldwaarden). Voor het nieuwe verkoopfacturen-plan (AFAS-kant) is nog niets afgestemd.
-   Zie §10.1 en §10.4.
+1. **AFAS-koppeling voor uren: authenticatie werkt nu, PtRealisation-connector nog niet
+   geautoriseerd** — de eerdere `unauthorized_client`-fout bleek het gebruik van de verkeerde
+   REST-hostname (`rest` i.p.v. `resttest` voor deze Test-omgeving, opgelost 27 aug 2026 — zie
+   §10.1). De OAuth-authenticatie slaagt nu; de connectoraanroep zelf geeft nog
+   `"Deze connector wordt niet ondersteund of de gebruiker is niet geautoriseerd."` — navragen
+   bij Willem van Melis of de `PtRealisation`-UpdateConnector is toegevoegd aan de rechten van de
+   "Skrepr"-gebruikersgroep in AFAS Profit. Ook nog te bevestigen zodra dat werkt: `PrId`
+   (projectveld, aanname) en de `ItCd`/`StId`-waarden (mogelijk generieke voorbeeldwaarden). Voor
+   het nieuwe verkoopfacturen-plan (AFAS-kant) is nog niets afgestemd. Zie §10.1 en §10.4.
 2. **Rentman → AFAS verkoopfacturen + PDF-bijlage + betaal-terugkoppeling** — plan is met de
    klant besproken en de Rentman-kant is technisch geverifieerd (MCP), maar er is nog geen
    regel code voor geschreven. Zie §10.4 voor de volledige stand van zaken.

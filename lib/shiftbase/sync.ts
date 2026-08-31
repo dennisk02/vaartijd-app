@@ -74,8 +74,11 @@ async function syncShipsAndProjects() {
 
   // Ship en ShipShiftbaseLink zijn sinds 27 aug 2026 losse tabellen (§10.6) --
   // createMany kan niet in één keer over twee tabellen heen, dus per rij.
+  // Schepen komen sinds 27 aug 2026 direct actief binnen (op klantverzoek --
+  // eerder inactief zodat een beheerder niet-schip-departments als "Kantoor"/
+  // "Quality" kon uitsluiten, maar dat handmatige controlestapje verviel).
   for (const d of shipsToCreate) {
-    const ship = await prisma.ship.create({ data: { name: d.name, active: false } });
+    const ship = await prisma.ship.create({ data: { name: d.name, active: true } });
     await prisma.shipShiftbaseLink.create({
       data: { shipId: ship.id, shiftbaseDepartmentId: d.id, shiftbaseDepartmentName: d.name },
     });

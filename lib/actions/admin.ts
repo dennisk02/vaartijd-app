@@ -18,11 +18,6 @@ const ADMIN_SCOPES: AdminScope[] = [
   "RAPPORTAGES",
 ];
 
-const ProjectSchema = z.object({
-  name: z.string().min(1, "Vul een naam in."),
-  afasProjectCode: z.string().optional(),
-});
-
 export type AdminFormState =
   | {
       errors?: Record<string, string[]>;
@@ -30,29 +25,12 @@ export type AdminFormState =
     }
   | undefined;
 
-export async function createProject(_state: AdminFormState, formData: FormData): Promise<AdminFormState> {
-  await requireAdminScope("PROJECTS");
-
-  const validatedFields = ProjectSchema.safeParse({
-    name: formData.get("name"),
-    afasProjectCode: formData.get("afasProjectCode") || undefined,
-  });
-  if (!validatedFields.success) {
-    return { errors: validatedFields.error.flatten().fieldErrors };
-  }
-
-  const afasProjectCode = validatedFields.data.afasProjectCode || null;
-  await prisma.project.create({
-    data: {
-      name: validatedFields.data.name,
-      // afasProjectCode staat sinds §10.6 in een eigen koppeltabel.
-      ...(afasProjectCode ? { afasLink: { create: { afasProjectCode } } } : {}),
-    },
-  });
-
-  revalidatePath("/admin/projects");
-  return { message: "Project aangemaakt." };
-}
+/// Projecten/schepen worden niet meer handmatig aangemaakt (27 aug 2026) --
+/// die komen altijd via de Rentman- resp. Shiftbase-sync binnen (zie
+/// lib/rentman/sync.ts / lib/shiftbase/sync.ts). createProject/createShip
+/// zijn daarom verwijderd; toggleProjectActive/toggleShipActive en de
+/// AFAS-projectcode blijven wel bewerkbaar (zie updateProjectAfasCode
+/// hieronder).
 
 export async function toggleProjectActive(id: string, active: boolean) {
   await requireAdminScope("PROJECTS");
@@ -60,37 +38,22 @@ export async function toggleProjectActive(id: string, active: boolean) {
   revalidatePath("/admin/projects");
 }
 
-const ShipSchema = z.object({
-  name: z.string().min(1, "Vul een naam in."),
-  code: z.string().optional(),
-  capacity: z
-    .string()
-    .optional()
-    .refine((value) => !value || (Number.isInteger(Number(value)) && Number(value) > 0), "Vul een geldige capaciteit in."),
-});
-
-export async function createShip(_state: AdminFormState, formData: FormData): Promise<AdminFormState> {
-  await requireAdminScope("SHIPS");
-
-  const validatedFields = ShipSchema.safeParse({
-    name: formData.get("name"),
-    code: formData.get("code") || undefined,
-    capacity: formData.get("capacity") || undefined,
-  });
-  if (!validatedFields.success) {
-    return { errors: validatedFields.error.flatten().fieldErrors };
+/** AFAS-projectcode los bewerkbaar houden nu er geen aanmaakformulier meer
+ * is (§10.6: afasProjectCode staat in ProjectAfasLink, niet op Project zelf). */
+export async function updateProjectAfasCode(projectId: string, afasProjectCode: string) {
+  await requireAdminScope("PROJECTS");
+  const code = afasProjectCode.trim() || null;
+  if (code) {
+    await prisma.projectAfasLink.upsert({
+      where: { projectId },
+      update: { afasProjectCode: code },
+      create: { projectId, afasProjectCode: code },
+    });
+  } else {
+    await prisma.projectAfasLink.deleteMany({ where: { projectId } });
   }
-
-  await prisma.ship.create({
-    data: {
-      name: validatedFields.data.name,
-      code: validatedFields.data.code || null,
-      capacity: validatedFields.data.capacity ? Number(validatedFields.data.capacity) : null,
-    },
-  });
-
-  revalidatePath("/admin/ships");
-  return { message: "Schip aangemaakt." };
+  revalidatePath("/admin/projects");
+  revalidatePath("/admin/rentman");
 }
 
 export async function toggleShipActive(id: string, active: boolean) {

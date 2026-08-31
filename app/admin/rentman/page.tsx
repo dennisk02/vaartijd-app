@@ -4,6 +4,7 @@ import { getRentmanSyncState } from "@/lib/rentman/sync";
 import { requireAdminScope } from "@/lib/dal";
 import { Card } from "@/components/ui";
 import { RentmanControls } from "@/components/admin/rentman-controls";
+import { RentmanProjectTable } from "@/components/admin/rentman-project-table";
 
 export default async function AdminRentmanPage() {
   await requireAdminScope("RENTMAN");
@@ -14,7 +15,6 @@ export default async function AdminRentmanPage() {
     prisma.project.findMany({
       where: { rentmanLink: { isNot: null } },
       orderBy: { rentmanLink: { rentmanStartsAt: "desc" } },
-      take: 50,
       include: { rentmanLink: true },
     }),
   ]);
@@ -46,35 +46,22 @@ export default async function AdminRentmanPage() {
 
       <div className="flex flex-col gap-3">
         <h2 className="text-sm font-medium text-slate-500">Projecten uit Rentman ({projects.length})</h2>
-        {projects.length === 0 && <p className="text-sm text-slate-500">Nog geen projecten gesynchroniseerd.</p>}
-        {projects.map((project) => (
-          <Card key={project.id} className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">{project.name}</p>
-              <p className="text-sm text-slate-500">
-                {project.rentmanLink?.rentmanProjectNumber ? `${project.rentmanLink.rentmanProjectNumber} · ` : ""}
-                {project.rentmanLink?.rentmanProjectName ?? ""}
-              </p>
-              {project.rentmanLink?.rentmanStartsAt && (
-                <p className="text-xs text-slate-400">
-                  {new Date(project.rentmanLink.rentmanStartsAt).toLocaleDateString("nl-NL")}
-                  {project.rentmanLink.rentmanEndsAt
-                    ? ` - ${new Date(project.rentmanLink.rentmanEndsAt).toLocaleDateString("nl-NL")}`
-                    : ""}
-                </p>
-              )}
-            </div>
-            <div className="text-right">
-              <span
-                className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                  project.active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                {project.rentmanLink?.rentmanStatus ?? (project.active ? "Actief" : "Inactief")}
-              </span>
-            </div>
-          </Card>
-        ))}
+        {projects.length === 0 ? (
+          <p className="text-sm text-slate-500">Nog geen projecten gesynchroniseerd.</p>
+        ) : (
+          <RentmanProjectTable
+            projects={projects.map((p) => ({
+              id: p.id,
+              name: p.name,
+              active: p.active,
+              rentmanProjectNumber: p.rentmanLink?.rentmanProjectNumber ?? null,
+              rentmanProjectName: p.rentmanLink?.rentmanProjectName ?? null,
+              rentmanStatus: p.rentmanLink?.rentmanStatus ?? null,
+              rentmanStartsAt: p.rentmanLink?.rentmanStartsAt?.toISOString() ?? null,
+              rentmanEndsAt: p.rentmanLink?.rentmanEndsAt?.toISOString() ?? null,
+            }))}
+          />
+        )}
       </div>
     </div>
   );

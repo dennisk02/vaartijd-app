@@ -1,18 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdminScope } from "@/lib/dal";
 import { Card, Button } from "@/components/ui";
-import { ShipForm } from "@/components/admin/ship-form";
 import { toggleShipActive } from "@/lib/actions/admin";
 
+/** Schepen worden niet meer handmatig aangemaakt -- ze komen altijd uit de
+ * Shiftbase-vaarbemanning-import (/admin/shiftbase), direct actief. Dit
+ * scherm is nu puur overzicht + eventueel handmatig deactiveren. */
 export default async function AdminShipsPage() {
   await requireAdminScope("SHIPS");
   const ships = await prisma.ship.findMany({ orderBy: { createdAt: "desc" } });
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <ShipForm />
-      </Card>
       <div className="flex flex-col gap-3">
         {ships.map((ship) => (
           <Card key={ship.id} className="flex items-center justify-between">
