@@ -1,7 +1,7 @@
 import { getSessionPayload } from "@/lib/session";
 import { userHasAdminScope } from "@/lib/dal";
-import { syncShiftbaseCrew } from "@/lib/shiftbase/sync";
-import { ShiftbaseApiError } from "@/lib/shiftbase/client";
+import { syncShiftbaseCrew } from "@/integrations/shiftbase/sync";
+import { ShiftbaseApiError } from "@/integrations/shiftbase/client";
 
 /// Dit is de tegenovergestelde richting van /api/shiftbase/sync (die stuurt
 /// Vaartijd-uren NAAR Shiftbase, en staat nog geblokkeerd). Deze route haalt

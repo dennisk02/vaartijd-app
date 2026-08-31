@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminScope } from "@/lib/dal";
-import { syncShiftbaseCrew } from "@/lib/shiftbase/sync";
-import { ShiftbaseApiError } from "@/lib/shiftbase/client";
+import { syncShiftbaseCrew } from "@/integrations/shiftbase/sync";
+import { ShiftbaseApiError } from "@/integrations/shiftbase/client";
 
 export type ShiftbaseCrewSyncState =
   | {

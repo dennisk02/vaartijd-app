@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { fetchAllSubprojects, type RentmanSubproject } from "@/lib/rentman/client";
+import { fetchAllSubprojects, type RentmanSubproject } from "@/integrations/rentman/client";
 
 /// Alleen subprojecten met een van deze statussen worden als actief (dus
 /// kiesbaar voor urenregistratie) getoond. Alle andere statussen -- ook nieuwe

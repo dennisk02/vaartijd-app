@@ -2,7 +2,7 @@ import "server-only";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { shiftbaseGet } from "@/lib/shiftbase/client";
+import { shiftbaseGet } from "@/integrations/shiftbase/client";
 
 /**
  * Importeert de River Roots-vaarbemanning uit Shiftbase (read-only) als

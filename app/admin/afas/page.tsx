@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { isAfasConfigured } from "@/lib/afas/client";
+import { isAfasConfigured } from "@/integrations/afas/client";
 import { requireAdminScope } from "@/lib/dal";
 import { Card, SyncStatusBadge } from "@/components/ui";
 import { AfasControls } from "@/components/admin/afas-controls";

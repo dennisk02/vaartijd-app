@@ -4,8 +4,8 @@ import { useState } from "react";
 import { dash } from "./colors";
 import { KpiCard, KpiGrid } from "./kpi-card";
 import { formatDate, formatEuro, formatMonthLabel } from "./format";
-import type { PendingRow, Subproject } from "@/lib/rentman/dashboardAggregate";
-import { pendingByMonth, pendingKpis } from "@/lib/rentman/dashboardAggregate";
+import type { PendingRow, Subproject } from "@/integrations/rentman/dashboardAggregate";
+import { pendingByMonth, pendingKpis } from "@/integrations/rentman/dashboardAggregate";
 
 function PendingColumn({
   title,

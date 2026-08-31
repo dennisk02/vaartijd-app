@@ -27,7 +27,7 @@ export function isShiftbaseConfigured() {
  * Of de (schrijvende) urenexport mag draaien. Staat los van
  * `isShiftbaseConfigured()`: de API-sleutel kan prima aanwezig en geldig
  * zijn (leesverkeer werkt dan al) terwijl het `/timesheets`-endpoint en de
- * veldnamen in `lib/shiftbase/hoursSync.ts` nog niet bevestigd zijn tegen de
+ * veldnamen in `integrations/shiftbase/hoursSync.ts` nog niet bevestigd zijn tegen de
  * echte Shiftbase-API. Zet `SHIFTBASE_HOURS_EXPORT_ENABLED=true` pas nadat
  * dat via de verkenner op /admin/shiftbase is geverifieerd.
  */

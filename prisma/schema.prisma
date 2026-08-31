@@ -28,7 +28,7 @@ enum Language {
 /// `shiftbaseDepartmentId` (wel/niet ingevuld), niet op naam -- zie
 /// lib/assignments.ts. De Events/Evento-onderverdeling zelf (voor Rentman-
 /// administratieroutering 02/21, op basis van het "EVENTO - "-naamvoorvoegsel)
-/// blijft een aparte, interne regel in lib/rentman/sync.ts en is geen
+/// blijft een aparte, interne regel in integrations/rentman/sync.ts en is geen
 /// onderdeel meer van deze zichtbaarheidskeuze.
 enum ProjectGroup {
   EVENTS_EVENTO
@@ -69,7 +69,7 @@ enum MealType {
 enum TimeEntryMode {
   TIMER
   MANUAL
-  /// Geimporteerd uit Shiftbase (vaarbemanning-uren) -- zie lib/shiftbase/sync.ts.
+  /// Geimporteerd uit Shiftbase (vaarbemanning-uren) -- zie integrations/shiftbase/sync.ts.
   SHIFTBASE_IMPORT
 }
 
@@ -278,7 +278,7 @@ model DaySubmission {
 // achtergrond en de bestanden die per koppeling lezen/schrijven.
 // ---------------------------------------------------------------------------
 
-/// Rentman-herkomst van een Project (read-only sync, lib/rentman/sync.ts).
+/// Rentman-herkomst van een Project (read-only sync, integrations/rentman/sync.ts).
 model ProjectRentmanLink {
   id                   String    @id @default(cuid())
   projectId            String    @unique
@@ -292,7 +292,7 @@ model ProjectRentmanLink {
 }
 
 /// AFAS-projectcode, handmatig ingesteld door een beheerder (voor de
-/// urenexport, lib/afas/hoursSync.ts) -- los van rentmanLink, want een
+/// urenexport, integrations/afas/hoursSync.ts) -- los van rentmanLink, want een
 /// Rentman-project kan best een eigen AFAS-code hebben.
 model ProjectAfasLink {
   id              String  @id @default(cuid())
@@ -302,7 +302,7 @@ model ProjectAfasLink {
 }
 
 /// Automatisch aangemaakt "vaarbemanning"-project bij een Shiftbase-afdeling
-/// (1 project per schip, lib/shiftbase/sync.ts).
+/// (1 project per schip, integrations/shiftbase/sync.ts).
 model ProjectShiftbaseLink {
   id                    String  @id @default(cuid())
   projectId             String  @unique
@@ -311,7 +311,7 @@ model ProjectShiftbaseLink {
 }
 
 /// Shiftbase-herkomst van een Ship ("department" = schip in de River
-/// Roots-vloot, lib/shiftbase/sync.ts). Nieuw gesyncte schepen komen
+/// Roots-vloot, integrations/shiftbase/sync.ts). Nieuw gesyncte schepen komen
 /// inactief binnen; een beheerder activeert de daadwerkelijke boten
 /// (sommige Shiftbase-afdelingen zijn geen schip, bv. "Kantoor").
 model ShipShiftbaseLink {
@@ -323,7 +323,7 @@ model ShipShiftbaseLink {
 }
 
 /// AFAS-medewerkernummer, handmatig ingesteld door een beheerder (voor de
-/// urenexport, lib/afas/hoursSync.ts).
+/// urenexport, integrations/afas/hoursSync.ts).
 model UserAfasLink {
   id                 String @id @default(cuid())
   userId             String @unique
@@ -332,7 +332,7 @@ model UserAfasLink {
 }
 
 /// Shiftbase-medewerker-ID -- gevuld bij de vaarbemanning-import
-/// (lib/shiftbase/sync.ts, `syncCrewUsers`), zodat een herhaalde import
+/// (integrations/shiftbase/sync.ts, `syncCrewUsers`), zodat een herhaalde import
 /// hetzelfde account bijwerkt i.p.v. dupliceert.
 model UserShiftbaseLink {
   id                  String @id @default(cuid())
@@ -341,7 +341,7 @@ model UserShiftbaseLink {
   shiftbaseEmployeeId String @unique
 }
 
-/// Sync-status richting AFAS voor één TimeEntry (lib/afas/hoursSync.ts).
+/// Sync-status richting AFAS voor één TimeEntry (integrations/afas/hoursSync.ts).
 model TimeEntryAfasLink {
   id          String     @id @default(cuid())
   timeEntryId String     @unique
@@ -354,7 +354,7 @@ model TimeEntryAfasLink {
 }
 
 /// Herkomst-koppeling: dit TimeEntry is geïmporteerd uit Shiftbase
-/// (vaarbemanning-uren, lib/shiftbase/sync.ts `syncTimesheets`). Alleen
+/// (vaarbemanning-uren, integrations/shiftbase/sync.ts `syncTimesheets`). Alleen
 /// gevuld bij mode = SHIFTBASE_IMPORT.
 model TimeEntryShiftbaseImport {
   id          String    @id @default(cuid())
@@ -363,7 +363,7 @@ model TimeEntryShiftbaseImport {
   timesheetId String    @unique
 }
 
-/// Sync-status richting Shiftbase voor één TimeEntry (lib/shiftbase/hoursSync.ts,
+/// Sync-status richting Shiftbase voor één TimeEntry (integrations/shiftbase/hoursSync.ts,
 /// de -- nog geblokkeerde/ongeverifieerde -- exportrichting, zie HANDOVER §10.3).
 model TimeEntryShiftbaseExport {
   id          String     @id @default(cuid())
@@ -380,14 +380,14 @@ model TimeEntryShiftbaseExport {
 // Rentman financieel dashboard (omzet/facturatie-rapportage over Rentman-
 // subprojecten). Losstaand van de operationele Project/Ship-sync hierboven --
 // haalt elke nacht een verse, volledige set subprojecten + facturen op,
-// specifiek voor deze rapportage. Zie lib/rentman/dashboardSync.ts.
+// specifiek voor deze rapportage. Zie integrations/rentman/dashboardSync.ts.
 // ---------------------------------------------------------------------------
 
 /// Eén rij per Rentman-subproject (jaargescoped, elke nacht volledig ververst
 /// -- rijen buiten de scope worden verwijderd). Dit is de ruwe brondata voor
 /// alle 6 tabs van het financiële dashboard; alle KPI's/grafieken/tabellen
 /// worden er bij het opbouwen van de pagina uit afgeleid (zie
-/// lib/rentman/dashboardAggregate.ts) i.p.v. vooraf apart geaggregeerd te
+/// integrations/rentman/dashboardAggregate.ts) i.p.v. vooraf apart geaggregeerd te
 /// worden -- bij ~800 rijen is dat in-memory triviaal snel, en het voorkomt
 /// dat elke nieuwe doorsnede een eigen vooraf-berekende tabel nodig heeft.
 model RentmanSubprojectSnapshot {

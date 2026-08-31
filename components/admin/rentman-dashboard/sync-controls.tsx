@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { syncRentmanDashboardNow } from "@/lib/actions/rentman-dashboard";
+import { syncRentmanDashboardNow } from "@/integrations/actions/rentman-dashboard";
 import { dash } from "./colors";
 
 export function RentmanDashboardSyncControls() {

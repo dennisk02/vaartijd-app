@@ -143,7 +143,7 @@ export type RentmanFinancialSubproject = {
  * Voor het financiële dashboard (§10.5): alle subprojecten met hun omzet/
  * facturatiecijfers, ongeacht status -- bewust geen incrementeel filter,
  * dit draait elke nacht als een verse, volledige berekening. Zie
- * lib/rentman/dashboardSync.ts.
+ * integrations/rentman/dashboardSync.ts.
  *
  * Beperkt tot `year` (aanmaakjaar) -- zonder deze filter haalt dit ALLE
  * subprojecten sinds het begin van het Rentman-account op (in de praktijk

@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { afasFetch, isAfasConfigured, AfasApiError } from "@/lib/afas/client";
+import { afasFetch, isAfasConfigured, AfasApiError } from "@/integrations/afas/client";
 import type { Prisma } from "@prisma/client";
 
 /// Alleen de velden die de AFAS-payload echt nodig heeft -- sinds §10.6

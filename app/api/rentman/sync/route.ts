@@ -1,8 +1,8 @@
 import { getSessionPayload } from "@/lib/session";
 import { userHasAdminScope } from "@/lib/dal";
-import { syncRentmanProjects } from "@/lib/rentman/sync";
-import { syncRentmanDashboard } from "@/lib/rentman/dashboardSync";
-import { RentmanApiError } from "@/lib/rentman/client";
+import { syncRentmanProjects } from "@/integrations/rentman/sync";
+import { syncRentmanDashboard } from "@/integrations/rentman/dashboardSync";
+import { RentmanApiError } from "@/integrations/rentman/client";
 
 async function isAuthorized(request: Request) {
   const expectedSecret = process.env.RENTMAN_SYNC_SECRET;

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { isRentmanConfigured } from "@/lib/rentman/client";
-import { getRentmanSyncState } from "@/lib/rentman/sync";
+import { isRentmanConfigured } from "@/integrations/rentman/client";
+import { getRentmanSyncState } from "@/integrations/rentman/sync";
 import { requireAdminScope } from "@/lib/dal";
 import { Card } from "@/components/ui";
 import { RentmanControls } from "@/components/admin/rentman-controls";

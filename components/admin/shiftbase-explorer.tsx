@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { queryShiftbase } from "@/lib/actions/shiftbase";
+import { queryShiftbase } from "@/integrations/actions/shiftbase";
 import { Button, Field, Input } from "@/components/ui";
 
 export function ShiftbaseExplorer() {

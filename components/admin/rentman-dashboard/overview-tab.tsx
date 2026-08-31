@@ -5,7 +5,7 @@ import { ChartTooltip } from "./chart-tooltip";
 import { dash, statusColor } from "./colors";
 import { KpiCard, KpiGrid, Callout, ChartCard } from "./kpi-card";
 import { formatEuro, formatMonthLabel } from "./format";
-import type { Subproject } from "@/lib/rentman/dashboardAggregate";
+import type { Subproject } from "@/integrations/rentman/dashboardAggregate";
 import {
   BV_ORDER,
   bvStats,
@@ -16,7 +16,7 @@ import {
   openByStatus,
   overviewKpis,
   statusByMonth,
-} from "@/lib/rentman/dashboardAggregate";
+} from "@/integrations/rentman/dashboardAggregate";
 
 const BV_COLORS: Record<string, string> = { EVENTO: dash.blue, "M&R Kampen": dash.green, "M&R Utrecht": dash.orange };
 const CAT_GROUP_COLORS: Record<string, string> = { Verhuur: dash.blue, Catering: dash.green, Overig: dash.mutedLight };

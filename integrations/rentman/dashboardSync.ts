@@ -4,7 +4,7 @@ import {
   fetchAllSubprojectsFinancial,
   fetchAllInvoicesForDashboard,
   type RentmanFinancialSubproject,
-} from "@/lib/rentman/client";
+} from "@/integrations/rentman/client";
 
 /**
  * Ververst de ruwe brondata van het financiële Rentman-dashboard (omzet/
@@ -15,7 +15,7 @@ import {
  * Slaat bewust GEEN vooraf-geaggregeerde cijfers op -- elk subproject wordt
  * los bewaard in `RentmanSubprojectSnapshot`, en alle KPI's/grafieken/
  * tabellen van de 5 tabbladen worden er bij het opbouwen van de pagina uit
- * afgeleid (zie lib/rentman/dashboardAggregate.ts). Bij ~800 rijen is dat
+ * afgeleid (zie integrations/rentman/dashboardAggregate.ts). Bij ~800 rijen is dat
  * in-memory triviaal snel, en het voorkomt dat elke nieuwe doorsnede een
  * eigen vooraf-berekende tabel nodig heeft.
  */

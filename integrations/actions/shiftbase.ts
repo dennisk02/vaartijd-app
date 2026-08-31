@@ -1,7 +1,7 @@
 "use server";
 
 import { requireAdminScope } from "@/lib/dal";
-import { shiftbaseGet, ShiftbaseApiError } from "@/lib/shiftbase/client";
+import { shiftbaseGet, ShiftbaseApiError } from "@/integrations/shiftbase/client";
 
 export type ShiftbaseQueryState =
   | {

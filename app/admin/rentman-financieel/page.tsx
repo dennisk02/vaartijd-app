@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { isRentmanConfigured } from "@/lib/rentman/client";
+import { isRentmanConfigured } from "@/integrations/rentman/client";
 import { requireAdminScope } from "@/lib/dal";
 import { RentmanDashboardSyncControls } from "@/components/admin/rentman-dashboard/sync-controls";
 import { RentmanDashboardTabs } from "@/components/admin/rentman-dashboard/tabs";
@@ -9,7 +9,7 @@ import { CancelledTab } from "@/components/admin/rentman-dashboard/cancelled-tab
 import { FollowUpTab } from "@/components/admin/rentman-dashboard/follow-up-tab";
 import { PendingTab } from "@/components/admin/rentman-dashboard/pending-tab";
 import { dash } from "@/components/admin/rentman-dashboard/colors";
-import type { Subproject } from "@/lib/rentman/dashboardAggregate";
+import type { Subproject } from "@/integrations/rentman/dashboardAggregate";
 
 export default async function RentmanFinancieelPage() {
   await requireAdminScope("RENTMAN_FINANCIEEL");

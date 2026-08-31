@@ -95,7 +95,7 @@ export async function deleteTimeEntry(id: string) {
 
   // Al naar AFAS geëxporteerde uren mogen niet meer verwijderd worden --
   // afasLink ontbreekt (nog nooit geprobeerd te syncen) of heeft een status
-  // anders dan SYNCED. Zie lib/afas/hoursSync.ts (§10.6).
+  // anders dan SYNCED. Zie integrations/afas/hoursSync.ts (§10.6).
   await prisma.timeEntry.deleteMany({
     where: {
       id,

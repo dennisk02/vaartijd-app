@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminScope } from "@/lib/dal";
-import { syncRentmanProjects } from "@/lib/rentman/sync";
-import { RentmanApiError } from "@/lib/rentman/client";
+import { syncRentmanProjects } from "@/integrations/rentman/sync";
+import { RentmanApiError } from "@/integrations/rentman/client";
 
 export type RentmanActionState =
   | {

@@ -27,7 +27,7 @@ export type AdminFormState =
 
 /// Projecten/schepen worden niet meer handmatig aangemaakt (27 aug 2026) --
 /// die komen altijd via de Rentman- resp. Shiftbase-sync binnen (zie
-/// lib/rentman/sync.ts / lib/shiftbase/sync.ts). createProject/createShip
+/// integrations/rentman/sync.ts / integrations/shiftbase/sync.ts). createProject/createShip
 /// zijn daarom verwijderd; toggleProjectActive/toggleShipActive en de
 /// AFAS-projectcode blijven wel bewerkbaar (zie updateProjectAfasCode
 /// hieronder).

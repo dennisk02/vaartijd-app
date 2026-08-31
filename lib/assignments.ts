@@ -7,7 +7,7 @@ import type { Prisma, ProjectGroup } from "@prisma/client";
 /// ProjectGroup-enum-comment in prisma/schema.prisma. Het "EVENTO - "-
 /// naamvoorvoegsel is een aparte, interne regel voor Rentman-
 /// administratieroutering (02 Events / 21 Evento, zie `EVENTO_PREFIX` in
-/// lib/rentman/sync.ts) en speelt geen rol meer in deze zichtbaarheidskeuze.
+/// integrations/rentman/sync.ts) en speelt geen rol meer in deze zichtbaarheidskeuze.
 ///
 /// Sinds de integratiekoppelingen losgemaakt zijn van Project/Ship (§10.6,
 /// 27 aug 2026) leest deze kernlogica de koppeltabellen via een relatie i.p.v.

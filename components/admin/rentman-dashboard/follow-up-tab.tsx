@@ -4,8 +4,8 @@ import { useState } from "react";
 import { dash } from "./colors";
 import { KpiCard, KpiGrid, Callout } from "./kpi-card";
 import { formatDate, formatEuro, formatMonthLabel } from "./format";
-import type { FollowUpRow, Subproject } from "@/lib/rentman/dashboardAggregate";
-import { followUpByMonth, followUpKpis } from "@/lib/rentman/dashboardAggregate";
+import type { FollowUpRow, Subproject } from "@/integrations/rentman/dashboardAggregate";
+import { followUpByMonth, followUpKpis } from "@/integrations/rentman/dashboardAggregate";
 
 const SECTIONS: { key: "aandacht" | "toekomstig" | "doorlopend"; label: string }[] = [
   { key: "aandacht", label: "🔴 Direct opvolgen (verlopen periode)" },
@@ -15,7 +15,7 @@ const SECTIONS: { key: "aandacht" | "toekomstig" | "doorlopend"; label: string }
 
 /** Tabblad "Opvolging" -- exact overgenomen van het referentiedashboard
  * (v6.1): filter/classificatieregels staan toegelicht in
- * lib/rentman/dashboardAggregate.ts. */
+ * integrations/rentman/dashboardAggregate.ts. */
 export function FollowUpTab({ subs }: { subs: Subproject[] }) {
   const kpi = followUpKpis(subs);
   const { months, data } = followUpByMonth(subs);

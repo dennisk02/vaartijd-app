@@ -1,7 +1,7 @@
 import { getSessionPayload } from "@/lib/session";
 import { userHasAdminScope } from "@/lib/dal";
-import { syncPendingTimeEntries } from "@/lib/shiftbase/hoursSync";
-import { isShiftbaseHoursExportEnabled } from "@/lib/shiftbase/client";
+import { syncPendingTimeEntries } from "@/integrations/shiftbase/hoursSync";
+import { isShiftbaseHoursExportEnabled } from "@/integrations/shiftbase/client";
 
 export async function POST(request: Request) {
   const providedSecret = request.headers.get("x-sync-secret");

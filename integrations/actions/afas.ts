@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminScope } from "@/lib/dal";
-import { syncPendingTimeEntries } from "@/lib/afas/hoursSync";
-import { testAfasConnection, AfasApiError } from "@/lib/afas/client";
+import { syncPendingTimeEntries } from "@/integrations/afas/hoursSync";
+import { testAfasConnection, AfasApiError } from "@/integrations/afas/client";
 
 export type AfasActionState =
   | {

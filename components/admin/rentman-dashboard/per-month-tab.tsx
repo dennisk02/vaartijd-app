@@ -6,8 +6,8 @@ import { ChartTooltip } from "./chart-tooltip";
 import { dash, statusColor } from "./colors";
 import { ChartCard } from "./kpi-card";
 import { formatDate, formatEuro, formatMonthLabel } from "./format";
-import type { Subproject } from "@/lib/rentman/dashboardAggregate";
-import { monthDetail, statusByMonth } from "@/lib/rentman/dashboardAggregate";
+import type { Subproject } from "@/integrations/rentman/dashboardAggregate";
+import { monthDetail, statusByMonth } from "@/integrations/rentman/dashboardAggregate";
 
 export function PerMonthTab({ subs, months }: { subs: Subproject[]; months: string[] }) {
   const [active, setActive] = useState(months[0] ?? "");

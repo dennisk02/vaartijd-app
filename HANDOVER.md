@@ -37,7 +37,7 @@ De twee bedrijfsonderdelen "Events" (administratie 02) en "Evento" (administrati
 in de hele app uit elkaar gehouden op basis van een naamconventie: een project dat uit Rentman
 komt en waarvan de naam begint met `"EVENTO - "` hoort bij Evento; alle andere projecten horen
 bij Events. Zie [§10.2](#102-rentman-read-only-projectimport) en `EVENTO_PREFIX` in
-`lib/rentman/sync.ts`. Dit is een aparte regel van de gebruikers-zichtbaarheidskeuze hieronder.
+`integrations/rentman/sync.ts`. Dit is een aparte regel van de gebruikers-zichtbaarheidskeuze hieronder.
 
 Daarnaast is er een **aparte groep**: de vaarbemanning van de River Roots-vloot (~270 mensen,
 Kitchen/Housekeeping/Management-rollen per schip), die niet in Rentman zit maar in Shiftbase
@@ -112,9 +112,9 @@ components/
   totp-setup-form.tsx         # Client-formulier voor de 2FA-instelpagina
   timer-widget.tsx  hours-entry.tsx  time-entry-form.tsx
   ship-occupancy-form.tsx  meal-count-form.tsx  food-waste-form.tsx
-  admin/                      # Beheer-specifieke componenten (forms, project-list, reports/*,
-                               # rentman-dashboard/* — de 6 tabs van het financiële dashboard +
-                               # colors.ts/kpi-card.tsx als gedeelde, pixel-exacte bouwstenen)
+  admin/                      # Beheer-specifieke componenten (project-list, reports/*,
+                               # rentman-dashboard/* — de 5 tabs van het financiële dashboard +
+                               # colors.ts/kpi-card.tsx als gedeelde bouwstenen)
 
 lib/
   session.ts  dal.ts          # Sessiebeheer (jose/JWT, incl. 2FA-tussenstap-cookie) + Data
@@ -126,15 +126,22 @@ lib/
   day-submission.ts           # isDateSubmitted() — of een dag al "ingediend" is
   reports.ts                  # Periode-utility voor rapportages
   timer.ts  dates.ts  definitions.ts  i18n.ts
-  actions/                    # "use server" — alle mutaties, per domein
-                               # (auth.ts + twofactor.ts: login/2FA-verificatie/2FA-instellen)
+  actions/                    # "use server" — kernmutaties (auth.ts + twofactor.ts: login/
+                               # 2FA-verificatie/-instellen, admin.ts, time-entries.ts, timer.ts,
+                               # ship-occupancy.ts, meal-counts.ts, food-waste.ts, ...)
+
+integrations/                 # Rentman/AFAS/Shiftbase, losgemaakt van de kernlaag (§10.6/§10.7 —
+                               # "optie A" uit de ontkoppelingsinschatting). Zie integrations/README.md
+                               # voor de grensregel; enige toegestane import terug naar de kernlaag
+                               # is requireAdminScope() uit lib/dal.ts.
+  rentman/                    # client.ts + sync.ts (projectimport) + dashboardSync.ts +
+                               # dashboardAggregate.ts (financieel dashboard, zie §10.5)
   afas/                       # AFAS Profit REST-koppeling (client + hoursSync)
-  rentman/                    # Rentman REST-koppeling: client.ts + sync.ts (projectimport) +
-                               # dashboardSync.ts + dashboardAggregate.ts (financieel dashboard,
-                               # zie §10.5)
-  shiftbase/                  # Shiftbase-koppeling: client.ts (verkenner) + sync.ts
-                               # (vaarbemanning-import, lezend, werkend) + hoursSync.ts
-                               # (urenexport, schrijvend, nog geblokkeerd/ongeverifieerd)
+  shiftbase/                  # client.ts (verkenner) + sync.ts (vaarbemanning-import, lezend,
+                               # werkend) + hoursSync.ts (urenexport, schrijvend, nog geblokkeerd)
+  actions/                    # "use server" voor deze drie koppelingen: rentman.ts,
+                               # rentman-dashboard.ts, afas.ts, shiftbase.ts, shiftbase-crew.ts,
+                               # shiftbase-sync.ts
 
 prisma/
   schema.prisma                # Datamodel — zie §5
@@ -187,7 +194,7 @@ Volledige bron: [`prisma/schema.prisma`](prisma/schema.prisma). Kernpunten per m
   (upsert + opschoning van rijen buiten de huidige jaarscope — geen incrementele sync). Naast de
   financiële velden ook `city`/`businessUnit`/`category` (voor de "Locatie"-kolommen resp. de
   "BV & Categorie"-sectie, zie §10.5). Alle KPI's/grafieken/tabellen van de 5 tabbladen worden hier
-  bij paginaopbouw uit afgeleid (`lib/rentman/dashboardAggregate.ts`) i.p.v. los
+  bij paginaopbouw uit afgeleid (`integrations/rentman/dashboardAggregate.ts`) i.p.v. los
   vooraf-geaggregeerd te worden.
 - **`RentmanInvoicedMonthly`** — apart van `RentmanSubprojectSnapshot` omdat dit op
   **factuurdatum** groepeert i.p.v. aanmaakdatum (voor de Maandoverleg-sectie op het
@@ -369,8 +376,8 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
 
 ### 10.1 AFAS Profit (uren-export) — **connector bevestigd, velden nog niet live geverifieerd**
 
-- Module: `lib/afas/client.ts` (REST-wrapper, **OAuth2 client-credentials**, zie onder) +
-  `lib/afas/hoursSync.ts` (mapt een `TimeEntry` naar de AFAS `PtRealisation`-UpdateConnector-
+- Module: `integrations/afas/client.ts` (REST-wrapper, **OAuth2 client-credentials**, zie onder) +
+  `integrations/afas/hoursSync.ts` (mapt een `TimeEntry` naar de AFAS `PtRealisation`-UpdateConnector-
   payload).
 - **OAuth2 i.p.v. statische token (24 aug 2026, ingericht door Royaal/Willem van Melis):** het
   eerdere statische-`AfasToken`-mechanisme (`AFAS_TOKEN`) is vervangen door een echte OAuth2
@@ -395,7 +402,7 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
     verkeerde (Productie-)hostnaam. Ontdekt door een cURL-voorbeeld te vergelijken op AFAS' eigen
     testtool (`connect.afas.nl/tools/restget`, door de klant zelf ingevuld en gedeeld als
     screenshot), dat expliciet `resttest.afas.online` toonde. `restHostFor()` in
-    `lib/afas/client.ts` regelt dit nu (alleen `O`/`T` bevestigd; andere voorvoegsels vallen terug
+    `integrations/afas/client.ts` regelt dit nu (alleen `O`/`T` bevestigd; andere voorvoegsels vallen terug
     op `rest` met een waarschuwing, niet gefabriceerd). **Dit was de daadwerkelijke oorzaak** van
     de hieronder beschreven `unauthorized_client`-fout, niet een AFAS-zijdig connector-probleem
     zoals aanvankelijk gedacht.
@@ -411,7 +418,7 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
 - **Connector- en veldnamen bevestigd, twee waarden nog onzeker:** Royaal stuurde een werkend
   voorbeeld van de `PtRealisation`-UpdateConnector (envelop `PtRealisationWeek`/`Element`/
   `Fields`, velden `EmId`/`DaTi`/`ItCd`/`StId`/`QuD1`). `mapTimeEntryToAfas()` in
-  `lib/afas/hoursSync.ts` gebruikt deze exacte veldnamen. **Twee dingen zijn nog niet
+  `integrations/afas/hoursSync.ts` gebruikt deze exacte veldnamen. **Twee dingen zijn nog niet
   bevestigd:**
   1. Het **projectveld** (`PrId`) ontbrak in het aangeleverde voorbeeld — waarschijnlijk
      afgesneden bij het kopiëren van het scherm, `PrId` is de gangbare AFAS-conventie voor dit
@@ -429,8 +436,8 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
 
 ### 10.2 Rentman (read-only projectimport) — **werkend**
 
-- Module: `lib/rentman/client.ts` (`fetchAllSubprojects`, paginering) +
-  `lib/rentman/sync.ts` (`syncRentmanProjects`, mapt Rentman-subprojecten naar `Project`-rijen).
+- Module: `integrations/rentman/client.ts` (`fetchAllSubprojects`, paginering) +
+  `integrations/rentman/sync.ts` (`syncRentmanProjects`, mapt Rentman-subprojecten naar `Project`-rijen).
 - **Alleen-lezen richting Vaartijd** — Rentman krijgt nooit uren terug via deze route (dat was
   de oorspronkelijke afspraak; zie wél [§10.4](#104-rentman-mcp-server--verkend-niet-afgebouwd) voor een nieuwere,
   nog niet afgeronde uitbreiding).
@@ -439,7 +446,7 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
   Optie, Aanvraag, Geannuleerd, Retour, ...) blijven `active: false` maar staan wél in de
   database (zichtbaar voor beheerders, niet kiesbaar voor medewerkers).
 - **Administratie-routing (02 Events / 21 Evento):** puur op naam — begint de projectnaam met
-  `"EVENTO - "`, dan Evento, anders Events. Zie `EVENTO_PREFIX` in `lib/rentman/sync.ts`. Sinds
+  `"EVENTO - "`, dan Evento, anders Events. Zie `EVENTO_PREFIX` in `integrations/rentman/sync.ts`. Sinds
   24 aug 2026 is dit **losgekoppeld** van de gebruikers-zichtbaarheidskeuze
   (`User.projectGroup`, nu `EVENTS_EVENTO`/`RIVER_ROOTS`, gebaseerd op Shiftbase-herkomst i.p.v.
   naam) — deze Events/Evento-routing blijft puur een interne AFAS-administratieregel.
@@ -464,8 +471,8 @@ alleen de tabbladen waarvoor `adminScopes` iets bevat.
 
 ### 10.3 Shiftbase — **vaarbemanning-import werkend, urenexport bewust geblokkeerd**
 
-- Modules: `lib/shiftbase/client.ts` (generieke REST-wrapper + verkenner-endpoint),
-  `lib/shiftbase/sync.ts` (nieuw, de vaarbemanning-import), `lib/shiftbase/hoursSync.ts` (oud,
+- Modules: `integrations/shiftbase/client.ts` (generieke REST-wrapper + verkenner-endpoint),
+  `integrations/shiftbase/sync.ts` (nieuw, de vaarbemanning-import), `integrations/shiftbase/hoursSync.ts` (oud,
   urenexport-scaffold, nog geblokkeerd).
 - **Authenticatie (19 aug 2026, opgelost):** Shiftbase verwacht `Authorization: API <sleutel>`
   (letterlijk het woord `API` als prefix, bevestigd via developer.shiftbase.com) -- de client
@@ -527,7 +534,7 @@ en veldnamen daarvoor zijn **nooit bevestigd** tegen de echte API (overgenomen u
 architectuurvoorstel). Nu de authenticatie werkt, zou een klik op "Nu synchroniseren" ook
 daadwerkelijk bij Shiftbase aankomen -- mogelijk met een verkeerde payload. Daarom blijft dit
 pad **hard geblokkeerd**, zowel de knop in de UI als de server action
-(`lib/actions/shiftbase-sync.ts`) als de externe trigger-route
+(`integrations/actions/shiftbase-sync.ts`) als de externe trigger-route
 (`app/api/shiftbase/sync/route.ts`), totdat `SHIFTBASE_HOURS_EXPORT_ENABLED=true` expliciet
 gezet wordt. Zet die pas aan nadat je via de verkenner het echte `/timesheets`-endpoint en de
 veldnamen hebt bevestigd én `mapTimeEntryToShiftbase()` daarop is aangepast.
@@ -576,7 +583,7 @@ hierboven), en zodra AFAS een betaling registreert, die betaalstatus terugzetten
 1. AFAS-token laten aanleveren door de klant, connectors verkennen.
 2. Prisma-model(len) voor "welke Rentman-facturen zijn al naar AFAS geëxporteerd" (sync-status
    + AFAS-boekingsreferentie, naar het patroon van `TimeEntry.afasSyncStatus`).
-3. Sync-module analoog aan `lib/rentman/sync.ts`: facturen ophalen (MCP of REST), PDF ophalen,
+3. Sync-module analoog aan `integrations/rentman/sync.ts`: facturen ophalen (MCP of REST), PDF ophalen,
    AFAS UpdateConnector-payload bouwen + PDF meesturen, boeken, status bijwerken.
 4. Betaal-terugkoppeling: AFAS-kant lezen (welke boekingen zijn betaald sinds vorige run) →
    `invoices.create_payments` in Rentman.
@@ -592,7 +599,7 @@ richting Rentman, net als §10.2 — dit voegt geen nieuwe schrijfrichting toe.
 **Architectuur:** één ruwe brontabel, geen vooraf-geaggregeerde tussentabellen. `RentmanSubprojectSnapshot`
 bevat één rij per Rentman-subproject (jaargescoped, elke nacht volledig ververst — rijen buiten
 scope worden verwijderd). Alle KPI's/grafieken/tabellen van de 5 tabbladen worden hieruit
-*bij het opbouwen van de pagina* afgeleid via pure functies in `lib/rentman/dashboardAggregate.ts`
+*bij het opbouwen van de pagina* afgeleid via pure functies in `integrations/rentman/dashboardAggregate.ts`
 (`overviewKpis`, `monthlySeries`, `statusByMonth`, `openByStatus`, `bvStats`/`omzetBvMaand`/
 `omzetPerCategorie`/`catGroupMaand`, `monthDetail`, `cancelledKpis`, `cancelledByMonth`/
 `cancelledInMonth`, `pendingKpis`/`pendingByMonth`, `followUpKpis`/`followUpByMonth`)
@@ -620,8 +627,8 @@ hieronder) — alle drie afgeleid in `dashboardSync.ts` (`cityOf`/`businessUnitO
   exact overeen met het referentiedashboard en Verhuur/Catering op een paar procent na (verklaarbaar
   door dataverschil tussen de "gisteren"-snapshot van de referentie en live data).
 
-- Module: `lib/rentman/dashboardSync.ts` (`syncRentmanDashboard()`), gebruikt twee fetch-functies
-  in `lib/rentman/client.ts`: `fetchAllSubprojectsFinancial(year)` en `fetchAllInvoicesForDashboard(year)`.
+- Module: `integrations/rentman/dashboardSync.ts` (`syncRentmanDashboard()`), gebruikt twee fetch-functies
+  in `integrations/rentman/client.ts`: `fetchAllSubprojectsFinancial(year)` en `fetchAllInvoicesForDashboard(year)`.
 - **Jaarscope (live ontdekte bug — 24 aug 2026 opgelost):** beide fetch-functies filteren op
   `year` (`created[gte]`/`created[lt]` resp. `date[gte]`/`date[lt]`, top-level queryparams —
   zelfde patroon als `modified[gte]` in §10.2). **Zonder** deze filter haalt Rentman de
@@ -726,7 +733,7 @@ náár Shiftbase, nog geblokkeerd/ongeverifieerd, zie §10.3) — bewust twee ap
 want import en export zijn onafhankelijke richtingen die nooit dezelfde rij vullen.
 
 **Waarom dit meer was dan de sync-modules herschrijven:** een grep op de te verplaatsen
-veldnamen liet zien dat ook echte kernlogica (niet alleen `lib/rentman|afas|shiftbase/*`) er
+veldnamen liet zien dat ook echte kernlogica (niet alleen `integrations/rentman|afas|shiftbase/*`) er
 rechtstreeks op las:
 - `lib/assignments.ts` — `projectGroupWhere()`/`shipGroupWhere()` (bepalen EVENTS_EVENTO vs.
   RIVER_ROOTS) filterden op `shiftbaseDepartmentId`, nu op `shiftbaseLink: { isNot: null }`.
@@ -739,20 +746,42 @@ nog steeds de juiste Rentman-projectnummers, en het aanmaken van een urenregistr
 nog steeds op het juiste project met een correcte `afasLink`/`shiftbaseExport`-koppelrij.
 
 **Nieuwe schrijfregel:** elke `TimeEntry` krijgt bij aanmaak (in `lib/actions/time-entries.ts`,
-`lib/actions/timer.ts` én `lib/shiftbase/sync.ts`) meteen een `afasLink` (en, behalve bij
+`lib/actions/timer.ts` én `integrations/shiftbase/sync.ts`) meteen een `afasLink` (en, behalve bij
 Shiftbase-import, een `shiftbaseExport`) met `syncStatus: PENDING` — dat verving het oude
 `@default(PENDING)` dat rechtstreeks op de kolom stond.
 
-**Ook meegenomen:** `lib/afas/hoursSync.ts` en `lib/shiftbase/hoursSync.ts` gebruiken nu een
+**Ook meegenomen:** `integrations/afas/hoursSync.ts` en `integrations/shiftbase/hoursSync.ts` gebruiken nu een
 gerichte `select` in plaats van `include: { user: true, project: true }` — dat laatste haalde
 ongemerkt de **volledige** User-/Project-rij op (incl. bv. `passwordHash`) enkel om één of twee
 velden te gebruiken. Relevant voor een toekomstige losse dienst (optie B in de
 ontkoppelingsinschatting): die hoeft zo nooit meer dan `afasEmployeeNumber`/`afasProjectCode`
 te zien.
 
-**Nog niet gedaan** (bewust buiten scope van deze eerste stap, zie de ontkoppelingsinschatting
-voor de volledige vervolgstappen): een eigen map-structuur/toegangslaag (optie A), of een
-losse, apart gedeployde dienst (optie B). Dit is puur de databaselaag.
+**Nog niet gedaan (toen):** een eigen map-structuur/toegangslaag (optie A) — zie §10.7, inmiddels
+wel gedaan — of een losse, apart gedeployde dienst (optie B, nog niet gedaan).
+
+### 10.7 Optie A afgerond: eigen `integrations/`-map (27 aug 2026)
+
+Vervolg op §10.6 — stap 2 uit het 4-stappenplan dat volgde op de ontkoppelingsinschatting.
+`lib/rentman/*`, `lib/afas/*`, `lib/shiftbase/*` en hun bijbehorende server actions
+(`lib/actions/{rentman,rentman-dashboard,afas,shiftbase,shiftbase-crew,shiftbase-sync}.ts`) zijn
+verplaatst naar een eigen top-level map, **`integrations/`** (zie
+[`integrations/README.md`](integrations/README.md) voor de volledige grensregel en indeling) —
+puur een `git mv` + import-paden bijwerken, geen logicawijziging.
+
+- **Wat wél verhuisde:** de vier koppelmodules zelf + hun server actions.
+- **Wat expliciet niet verhuisde:** de admin-pagina's (`app/admin/{rentman,rentman-financieel,
+  afas,shiftbase}/page.tsx` — Next.js vereist dat pagina's onder `app/` staan) en hun
+  UI-componenten (`components/admin/rentman-dashboard/*`, `*-controls.tsx`,
+  `shiftbase-explorer.tsx`) — die bevatten geen kennis van de externe systemen zelf, ze krijgen
+  platte data doorgegeven.
+- **De grens is een conventie, geen technische afdwinging** (geen aparte package, geen
+  lint-regel, geen CODEOWNERS) — bewust, want dat hoort pas bij optie B. De regel staat expliciet
+  uitgeschreven in `integrations/README.md`: alles hier mag alleen via `requireAdminScope()` uit
+  `lib/dal.ts` de kernlaag raken, nooit rechtstreeks `User`/`ShipOccupancy`/etc.
+- **Nog niet gedaan:** optie B (eigen `package.json`, aparte deploy, eigen database-credential,
+  API-contract met de rest van Vaartijd) — volgt pas ná de twee prioriteitskoppelingen (§10.4),
+  zoals het 4-stappenplan voorschrijft.
 
 ---
 

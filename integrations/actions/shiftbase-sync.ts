@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminScope } from "@/lib/dal";
-import { syncPendingTimeEntries } from "@/lib/shiftbase/hoursSync";
-import { isShiftbaseHoursExportEnabled } from "@/lib/shiftbase/client";
+import { syncPendingTimeEntries } from "@/integrations/shiftbase/hoursSync";
+import { isShiftbaseHoursExportEnabled } from "@/integrations/shiftbase/client";
 
 export type ShiftbaseSyncActionState =
   | {

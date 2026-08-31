@@ -1,6 +1,6 @@
 import { getSessionPayload } from "@/lib/session";
 import { userHasAdminScope } from "@/lib/dal";
-import { syncPendingTimeEntries } from "@/lib/afas/hoursSync";
+import { syncPendingTimeEntries } from "@/integrations/afas/hoursSync";
 
 export async function POST(request: Request) {
   const providedSecret = request.headers.get("x-sync-secret");

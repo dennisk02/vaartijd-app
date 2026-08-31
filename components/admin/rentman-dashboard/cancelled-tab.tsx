@@ -6,8 +6,8 @@ import { ChartTooltip } from "./chart-tooltip";
 import { dash } from "./colors";
 import { KpiCard, KpiGrid, Callout, ChartCard } from "./kpi-card";
 import { formatEuro, formatMonthLabel } from "./format";
-import type { Subproject } from "@/lib/rentman/dashboardAggregate";
-import { cancelledByMonth, cancelledInMonth, cancelledKpis } from "@/lib/rentman/dashboardAggregate";
+import type { Subproject } from "@/integrations/rentman/dashboardAggregate";
+import { cancelledByMonth, cancelledInMonth, cancelledKpis } from "@/integrations/rentman/dashboardAggregate";
 
 export function CancelledTab({ subs, months }: { subs: Subproject[]; months: string[] }) {
   const [active, setActive] = useState(months[0] ?? "");

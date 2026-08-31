@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { syncRentmanNow } from "@/lib/actions/rentman";
+import { syncRentmanNow } from "@/integrations/actions/rentman";
 import { Button } from "@/components/ui";
 
 export function RentmanControls() {

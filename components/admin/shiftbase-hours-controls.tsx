@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { syncShiftbaseNow } from "@/lib/actions/shiftbase-sync";
+import { syncShiftbaseNow } from "@/integrations/actions/shiftbase-sync";
 import { Button } from "@/components/ui";
 
 export function ShiftbaseHoursControls({ exportEnabled }: { exportEnabled: boolean }) {

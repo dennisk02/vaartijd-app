@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { isShiftbaseConfigured, isShiftbaseHoursExportEnabled } from "@/lib/shiftbase/client";
+import { isShiftbaseConfigured, isShiftbaseHoursExportEnabled } from "@/integrations/shiftbase/client";
 import { requireAdminScope } from "@/lib/dal";
 import { Card, SyncStatusBadge } from "@/components/ui";
 import { ShiftbaseExplorer } from "@/components/admin/shiftbase-explorer";
@@ -77,7 +77,7 @@ export default async function AdminShiftbasePage() {
           ⚠️ De urenexport hieronder gebruikt een <strong>nog niet geverifieerd</strong> endpoint
           (<code>/timesheets</code>) en veldnamen. Gebruik de verkenner onderaan deze pagina om de
           werkelijke Shiftbase-API te bevestigen voordat je hierop vertrouwt -- pas daarna
-          <code> lib/shiftbase/hoursSync.ts</code> aan met de juiste veldnamen.
+          <code> integrations/shiftbase/hoursSync.ts</code> aan met de juiste veldnamen.
           {!exportEnabled && " De knop hieronder is daarom voorlopig geblokkeerd."}
         </p>
       </Card>

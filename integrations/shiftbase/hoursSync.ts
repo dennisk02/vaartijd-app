@@ -1,9 +1,9 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { shiftbasePost, isShiftbaseConfigured, ShiftbaseApiError } from "@/lib/shiftbase/client";
+import { shiftbasePost, isShiftbaseConfigured, ShiftbaseApiError } from "@/integrations/shiftbase/client";
 import type { Prisma } from "@prisma/client";
 
-/// Zie de toelichting bij ENTRY_SELECT in lib/afas/hoursSync.ts -- zelfde
+/// Zie de toelichting bij ENTRY_SELECT in integrations/afas/hoursSync.ts -- zelfde
 /// reden om een gerichte `select` te gebruiken i.p.v. volledige rijen.
 const ENTRY_SELECT = {
   id: true,

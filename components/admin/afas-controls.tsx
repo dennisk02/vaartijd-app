@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { syncNow, testConnection } from "@/lib/actions/afas";
+import { syncNow, testConnection } from "@/integrations/actions/afas";
 import { Button } from "@/components/ui";
 
 export function AfasControls() {

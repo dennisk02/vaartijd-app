@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { syncShiftbaseCrewNow } from "@/lib/actions/shiftbase-crew";
+import { syncShiftbaseCrewNow } from "@/integrations/actions/shiftbase-crew";
 import { Button } from "@/components/ui";
 
 export function ShiftbaseCrewControls() {
