@@ -289,6 +289,17 @@ model ProjectRentmanLink {
   rentmanStatus        String?
   rentmanStartsAt      DateTime?
   rentmanEndsAt        DateTime?
+
+  /// Wanneer `rentmanStatus` voor het laatst daadwerkelijk wijzigde (alleen
+  /// bijgewerkt bij een echte statuswijziging, niet bij elke sync) -- gebruikt
+  /// voor het "recent bevestigd, nog naar AFAS"-overzicht op het financiële
+  /// dashboard. Zie integrations/rentman/sync.ts.
+  rentmanStatusChangedAt DateTime?
+  /// Handmatig geselecteerd door een beheerder als "klaar om naar AFAS door
+  /// te zetten" -- puur een wachtrij/checklist zolang er nog geen
+  /// geautoriseerde AFAS-UpdateConnector voor projectaanmaak is (zie
+  /// HANDOVER.md §10.4/§17); null = niet geselecteerd.
+  afasCreateRequestedAt  DateTime?
 }
 
 /// AFAS-projectcode, handmatig ingesteld door een beheerder (voor de

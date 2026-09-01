@@ -50,17 +50,22 @@ export async function syncRentmanProjects() {
     // het Project zelf op naam/active, dan de koppelrij op rentmanSubprojectId.
     const existingLink = await prisma.projectRentmanLink.findUnique({
       where: { rentmanSubprojectId },
-      select: { projectId: true },
+      select: { projectId: true, rentmanStatus: true },
     });
     const project = await prisma.project.upsert({
       where: { id: existingLink?.projectId ?? "" },
       update: { name, active },
       create: { name, active },
     });
+    // rentmanStatusChangedAt alleen bijwerken bij een echte statuswijziging
+    // (of de eerste keer dat dit project gezien wordt) -- niet bij elke sync,
+    // anders is het onbruikbaar als "wanneer werd dit Bevestigd"-signaal voor
+    // het AFAS-aanmaak-overzicht (§10.4/§17).
+    const statusChanged = !existingLink || existingLink.rentmanStatus !== rentmanFields.rentmanStatus;
     await prisma.projectRentmanLink.upsert({
       where: { rentmanSubprojectId },
-      update: rentmanFields,
-      create: { rentmanSubprojectId, projectId: project.id, ...rentmanFields },
+      update: { ...rentmanFields, ...(statusChanged ? { rentmanStatusChangedAt: new Date() } : {}) },
+      create: { rentmanSubprojectId, projectId: project.id, ...rentmanFields, rentmanStatusChangedAt: new Date() },
     });
 
     if (subproject.modified && (!highestModified || subproject.modified > highestModified)) {

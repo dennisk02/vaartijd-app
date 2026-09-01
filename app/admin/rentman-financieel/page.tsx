@@ -8,6 +8,7 @@ import { PerMonthTab } from "@/components/admin/rentman-dashboard/per-month-tab"
 import { CancelledTab } from "@/components/admin/rentman-dashboard/cancelled-tab";
 import { FollowUpTab } from "@/components/admin/rentman-dashboard/follow-up-tab";
 import { PendingTab } from "@/components/admin/rentman-dashboard/pending-tab";
+import { AfasCreateTab } from "@/components/admin/rentman-dashboard/afas-create-tab";
 import { dash } from "@/components/admin/rentman-dashboard/colors";
 import type { Subproject } from "@/integrations/rentman/dashboardAggregate";
 
@@ -15,9 +16,22 @@ export default async function RentmanFinancieelPage() {
   await requireAdminScope("RENTMAN_FINANCIEEL");
   const configured = isRentmanConfigured();
 
-  const [snapshotRows, invoicedMonthly] = await Promise.all([
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+  const [snapshotRows, invoicedMonthly, recentlyConfirmed] = await Promise.all([
     prisma.rentmanSubprojectSnapshot.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.rentmanInvoicedMonthly.findMany({ orderBy: { month: "asc" } }),
+    prisma.project.findMany({
+      where: {
+        rentmanLink: {
+          rentmanStatus: "Bevestigd",
+          rentmanStatusChangedAt: { gte: oneMonthAgo },
+        },
+      },
+      orderBy: { rentmanLink: { rentmanStatusChangedAt: "desc" } },
+      include: { rentmanLink: true },
+    }),
   ]);
 
   const subs: Subproject[] = snapshotRows.map((r) => ({
@@ -91,6 +105,23 @@ export default async function RentmanFinancieelPage() {
               { id: "opvolging", label: "⚠ Opvolging", content: <FollowUpTab subs={subs} /> },
               { id: "inoptie", label: "🔴 In optie & aanvraag", content: <PendingTab subs={subs} /> },
               { id: "geannuleerd", label: "❌ Geannuleerd", content: <CancelledTab subs={subs} months={months} /> },
+              {
+                id: "afas-aanmaken",
+                label: "🏗️ Naar AFAS",
+                content: (
+                  <AfasCreateTab
+                    rows={recentlyConfirmed.map((p) => ({
+                      projectId: p.id,
+                      name: p.rentmanLink?.rentmanProjectName ?? p.name,
+                      rentmanProjectNumber: p.rentmanLink?.rentmanProjectNumber ?? null,
+                      rentmanStartsAt: p.rentmanLink?.rentmanStartsAt?.toISOString() ?? null,
+                      rentmanEndsAt: p.rentmanLink?.rentmanEndsAt?.toISOString() ?? null,
+                      rentmanStatusChangedAt: p.rentmanLink?.rentmanStatusChangedAt?.toISOString() ?? null,
+                      afasCreateRequestedAt: p.rentmanLink?.afasCreateRequestedAt?.toISOString() ?? null,
+                    }))}
+                  />
+                ),
+              },
             ]}
           />
         )}

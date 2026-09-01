@@ -653,7 +653,8 @@ hieronder) — alle drie afgeleid in `dashboardSync.ts` (`cityOf`/`businessUnitO
   omzet nooit meetelt in de actieve omzettotalen. Verwacht dat dit KPI-getal van dag tot dag
   merkbaar springt (elke nieuwe annulering met een groot offertebedrag telt direct mee) — dat is
   correct/gewenst gedrag voor een "live" dashboard, geen bug.
-- **5 tabbladen, exact als het referentiedashboard v6.1 ("samengevoegd")** — bijgewerkt 25 aug 2026
+- **6 tabbladen** (5 exact als het referentiedashboard v6.1 "samengevoegd", plus een 6e eigen
+  tabblad — zie onder) — bijgewerkt 25 aug 2026
   na vergelijking met een nieuwe referentie-export (`rentman_dashboard_v6_1.html`), die zelf ook
   "Maandoverleg" niet meer als apart tabblad had en een nieuwe "BV & Categorie"-sectie toevoegde:
   1. **Overzicht** — 5 KPI's (Projecten, Projectomzet, Gefactureerd %, In optie, Direct opvolgen),
@@ -688,6 +689,19 @@ hieronder) — alle drie afgeleid in `dashboardSync.ts` (`cityOf`/`businessUnitO
      maandkiezer met tabel van geannuleerde projecten (#, Project, Locatie, Reden annulering,
      Gederfde omzet) gesorteerd op offertebedrag. "Reden annulering" toont altijd "niet bekend"
      (net als v6.1) — geen custom veld in Rentman, zie de Callout op dit tabblad.
+  6. **🏗️ Naar AFAS** (27 aug 2026, eigen toevoeging, geen onderdeel van v6.1) — projecten die
+     de afgelopen maand naar Rentman-status "Bevestigd" gingen, meest recent bovenaan, met een
+     aanvinkbare checklist ("klaar om door te zetten naar AFAS"). Puur een wachtrij/checklist:
+     er is nog geen geautoriseerde AFAS-UpdateConnector voor projectaanmaak (zie §10.4/§17), dus
+     "aanvinken" stuurt bewust niets naar AFAS — het markeert alleen welke al meegenomen zijn,
+     zodat dat in één keer kan zodra die koppeling er wél is. Databronnen: nieuwe velden op
+     `ProjectRentmanLink` (migratie `20260827180000_rentman_afas_create_tracking`):
+     `rentmanStatusChangedAt` (alleen bijgewerkt bij een écht andere status, niet bij elke sync —
+     zie `integrations/rentman/sync.ts`) en `afasCreateRequestedAt` (de checkbox-staat, via
+     `toggleAfasCreateRequested()` in `integrations/actions/rentman-dashboard.ts`). Bij de
+     introductie eenmalig teruggevuld met Rentmans eigen `modified`-veld als benadering (geen
+     echte statuswijzigingshistorie beschikbaar van vóór dit veld bestond) — vanaf nu is het wel
+     exact.
 - **Donker thema (25 aug 2026)** — de klant leverde een tweede stijlgids aan
   (`instructie_dashboardstijl_vaartijden.md`) met een donker kleurenschema (`--bg #0f1115`,
   panelen `#171a21`/`#1e222b`, 4 semantische kleuren blauw/groen/oranje/rood) en vroeg dit

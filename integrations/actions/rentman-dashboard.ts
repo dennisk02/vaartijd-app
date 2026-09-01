@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminScope } from "@/lib/dal";
+import { prisma } from "@/lib/prisma";
 import { syncRentmanDashboard } from "@/integrations/rentman/dashboardSync";
 import { RentmanApiError } from "@/integrations/rentman/client";
 
@@ -28,5 +29,18 @@ export async function syncRentmanDashboardNow(
     const message = error instanceof RentmanApiError ? error.message : "Onbekende fout bij berekenen van het dashboard.";
     return { error: message };
   }
+}
+
+/** Selecteert/deselecteert een Rentman-project als "klaar om door te zetten
+ * naar AFAS" -- puur een wachtrij/checklist (§10.4/§17): er is nog geen
+ * geautoriseerde AFAS-UpdateConnector voor projectaanmaak, dus dit doet
+ * bewust geen echte AFAS-aanroep. */
+export async function toggleAfasCreateRequested(projectId: string, requested: boolean) {
+  await requireAdminScope("RENTMAN_FINANCIEEL");
+  await prisma.projectRentmanLink.update({
+    where: { projectId },
+    data: { afasCreateRequestedAt: requested ? new Date() : null },
+  });
+  revalidatePath("/admin/rentman-financieel");
 }
 
