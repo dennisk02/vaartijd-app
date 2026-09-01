@@ -3,7 +3,7 @@
 import * as z from "zod";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireAdminScope } from "@/lib/dal";
+import { requireAdmin, requireAdminScopeWrite } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import type { AdminScope } from "@prisma/client";
 
@@ -33,7 +33,7 @@ export type AdminFormState =
 /// hieronder).
 
 export async function toggleProjectActive(id: string, active: boolean) {
-  await requireAdminScope("PROJECTS");
+  await requireAdminScopeWrite("PROJECTS");
   await prisma.project.update({ where: { id }, data: { active } });
   revalidatePath("/admin/projects");
 }
@@ -41,7 +41,7 @@ export async function toggleProjectActive(id: string, active: boolean) {
 /** AFAS-projectcode los bewerkbaar houden nu er geen aanmaakformulier meer
  * is (§10.6: afasProjectCode staat in ProjectAfasLink, niet op Project zelf). */
 export async function updateProjectAfasCode(projectId: string, afasProjectCode: string) {
-  await requireAdminScope("PROJECTS");
+  await requireAdminScopeWrite("PROJECTS");
   const code = afasProjectCode.trim() || null;
   if (code) {
     await prisma.projectAfasLink.upsert({
@@ -57,7 +57,7 @@ export async function updateProjectAfasCode(projectId: string, afasProjectCode: 
 }
 
 export async function toggleShipActive(id: string, active: boolean) {
-  await requireAdminScope("SHIPS");
+  await requireAdminScopeWrite("SHIPS");
   await prisma.ship.update({ where: { id }, data: { active } });
   revalidatePath("/admin/ships");
 }
@@ -108,13 +108,13 @@ export async function createUser(_state: AdminFormState, formData: FormData): Pr
 }
 
 export async function toggleUserActive(id: string, active: boolean) {
-  await requireAdminScope("USERS");
+  await requireAdminScopeWrite("USERS");
   await prisma.user.update({ where: { id }, data: { active } });
   revalidatePath("/admin/users");
 }
 
 export async function updateUserAssignments(userId: string, formData: FormData) {
-  const currentUser = await requireAdminScope("USERS");
+  const currentUser = await requireAdminScopeWrite("USERS");
 
   const projectIds = formData.getAll("projectIds").map(String);
   const shipIds = formData.getAll("shipIds").map(String);
@@ -139,6 +139,7 @@ export async function updateUserAssignments(userId: string, formData: FormData) 
     currentUser.role === "ADMIN"
       ? formData.getAll("adminScopes").map(String).filter((s): s is AdminScope => ADMIN_SCOPES.includes(s as AdminScope))
       : undefined;
+  const adminViewOnly = currentUser.role === "ADMIN" ? formData.get("adminViewOnly") === "on" : undefined;
 
   await prisma.user.update({
     where: { id: userId },
@@ -152,6 +153,7 @@ export async function updateUserAssignments(userId: string, formData: FormData) 
       defaultProjectId,
       projectGroup,
       ...(adminScopes !== undefined ? { adminScopes: { set: adminScopes } } : {}),
+      ...(adminViewOnly !== undefined ? { adminViewOnly } : {}),
     },
   });
 

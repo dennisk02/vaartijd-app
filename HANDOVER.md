@@ -268,6 +268,27 @@ niet volledig beheerder) kan bestaande medewerkers bewerken (toewijzingen, proje
 onderdelen aan/uit), maar **niet** nieuwe accounts aanmaken en **niet** iemands admin-scopes of
 rol wijzigen — dat blijft aan volledige beheerders voorbehouden.
 
+**Kijktoegang zonder wijzigingsrechten (`User.adminViewOnly`, 27 aug 2026):** los van *welke*
+onderdelen iemand ziet (`adminScopes`), regelt dit vlagje *of* diegene daarbinnen iets mag
+wijzigen. `requireAdminScope(scope)` (paginaguards, en de handvol puur-lezende acties zoals de
+Shiftbase-verkenner/AFAS-verbindingstest) checkt alleen `adminScopes`, ongeacht `adminViewOnly` —
+zo blijft kijken altijd mogelijk. Elke *muterende* server-actie (aanmaken/bewerken/
+(de)activeren/synchroniseren) gebruikt in plaats daarvan `requireAdminScopeWrite(scope)`
+(resp. `userHasAdminScopeWrite()` voor de externe cron/secret-routes), die daarbovenop weigert
+als `adminViewOnly` aan staat. Ingesteld via dezelfde "Scoped beheerder-onderdelen"-sectie als
+`adminScopes` (alleen volledige beheerders, zelfde zelf-escalatie-bescherming). Voorbeeld:
+Renko van Bodegraven heeft alle 8 scopes (ziet dus alles) + `adminViewOnly: true` (kan nergens
+iets wijzigen of een sync starten) — Niels/Henry hebben alleen `RENTMAN_FINANCIEEL`, zonder
+`adminViewOnly`, en mogen dus wel op dat ene scherm herberekenen/de AFAS-checklist aanvinken.
+
+**Rechtstreeks naar het dashboard na login:** `app/page.tsx` (het medewerker-thuisscherm)
+stuurt een gebruiker met **uitsluitend** `adminScopes: ["RENTMAN_FINANCIEEL"]` (en geen volledig
+beheerder) meteen door naar `/admin/rentman-financieel` — dat thuisscherm heeft toch niets te
+bieden voor iemand die alleen het financiële dashboard mag zien. Geldt zowel vlak na
+inloggen/2FA (die landen sowieso eerst op "/") als bij elke latere navigatie naar "/". Renko valt
+hier **niet** onder (heeft alle 8 scopes, niet uitsluitend deze ene), dus die ziet het normale
+beheerscherm met alle tabbladen (allemaal kijkalleen).
+
 ### TOTP-2FA (verplicht voor alle accounts)
 
 Authenticator-app-gebaseerd (Google/Microsoft Authenticator e.d.), 6 cijfers, 30 seconden,

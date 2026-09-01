@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdminScope } from "@/lib/dal";
+import { requireAdminScopeWrite } from "@/lib/dal";
 import { syncPendingTimeEntries } from "@/integrations/shiftbase/hoursSync";
 import { isShiftbaseHoursExportEnabled } from "@/integrations/shiftbase/client";
 
@@ -13,7 +13,7 @@ export type ShiftbaseSyncActionState =
   | undefined;
 
 export async function syncShiftbaseNow(_state: ShiftbaseSyncActionState): Promise<ShiftbaseSyncActionState> {
-  await requireAdminScope("SHIFTBASE");
+  await requireAdminScopeWrite("SHIFTBASE");
 
   if (!isShiftbaseHoursExportEnabled()) {
     return {

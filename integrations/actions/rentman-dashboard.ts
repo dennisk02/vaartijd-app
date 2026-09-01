@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdminScope } from "@/lib/dal";
+import { requireAdminScopeWrite } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { syncRentmanDashboard } from "@/integrations/rentman/dashboardSync";
 import { RentmanApiError } from "@/integrations/rentman/client";
@@ -16,7 +16,7 @@ export type RentmanDashboardSyncState =
 export async function syncRentmanDashboardNow(
   _state: RentmanDashboardSyncState
 ): Promise<RentmanDashboardSyncState> {
-  await requireAdminScope("RENTMAN_FINANCIEEL");
+  await requireAdminScopeWrite("RENTMAN_FINANCIEEL");
 
   try {
     const result = await syncRentmanDashboard();
@@ -36,7 +36,7 @@ export async function syncRentmanDashboardNow(
  * geautoriseerde AFAS-UpdateConnector voor projectaanmaak, dus dit doet
  * bewust geen echte AFAS-aanroep. */
 export async function toggleAfasCreateRequested(projectId: string, requested: boolean) {
-  await requireAdminScope("RENTMAN_FINANCIEEL");
+  await requireAdminScopeWrite("RENTMAN_FINANCIEEL");
   await prisma.projectRentmanLink.update({
     where: { projectId },
     data: { afasCreateRequestedAt: requested ? new Date() : null },

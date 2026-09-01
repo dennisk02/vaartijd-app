@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdminScope } from "@/lib/dal";
+import { requireAdminScope, requireAdminScopeWrite } from "@/lib/dal";
 import { syncPendingTimeEntries } from "@/integrations/afas/hoursSync";
 import { testAfasConnection, AfasApiError } from "@/integrations/afas/client";
 
@@ -13,7 +13,7 @@ export type AfasActionState =
   | undefined;
 
 export async function syncNow(_state: AfasActionState): Promise<AfasActionState> {
-  await requireAdminScope("AFAS");
+  await requireAdminScopeWrite("AFAS");
   const processed = await syncPendingTimeEntries();
   revalidatePath("/admin/afas");
   revalidatePath("/uren");

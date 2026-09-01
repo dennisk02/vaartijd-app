@@ -32,6 +32,7 @@ export const getUser = cache(async () => {
       defaultProjectId: true,
       projectGroup: true,
       adminScopes: true,
+      adminViewOnly: true,
       totpEnabled: true,
       defaultProject: { select: { id: true, name: true } },
     },
@@ -78,6 +79,23 @@ export async function requireAnyAdminScope() {
 }
 
 /**
+ * Zelfde toegangscheck als requireAdminScope, plus: weigert alsnog als de
+ * gebruiker `adminViewOnly` heeft (kijktoegang zonder wijzigingsrechten,
+ * zie het schema-commentaar bij User.adminViewOnly). Gebruik dit i.p.v.
+ * requireAdminScope in elke server-actie die daadwerkelijk iets *wijzigt*
+ * (aanmaken/bewerken/(de)activeren/synchroniseren) -- requireAdminScope
+ * zelf blijft alleen voor *weergave* (paginaguards, en de enkele
+ * puur-lezende acties zoals de Shiftbase-verkenner/AFAS-verbindingstest).
+ */
+export async function requireAdminScopeWrite(scope: AdminScope) {
+  const user = await requireAdminScope(scope);
+  if (user.adminViewOnly) {
+    forbidden();
+  }
+  return user;
+}
+
+/**
  * Niet-gooiende variant van requireAdminScope, voor de externe
  * cron/secret-trigger-routes (app/api/*\/sync, .../crew-import) -- die
  * gebruiken hun eigen secret-gebaseerde autorisatie als primair pad en deze
@@ -88,5 +106,16 @@ export async function requireAnyAdminScope() {
 export async function userHasAdminScope(userId: string, scope: AdminScope) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, adminScopes: true } });
   if (!user) return false;
+  return user.role === "ADMIN" || user.adminScopes.includes(scope);
+}
+
+/** Niet-gooiende variant van requireAdminScopeWrite, voor dezelfde externe
+ * trigger-routes als userHasAdminScope hierboven. */
+export async function userHasAdminScopeWrite(userId: string, scope: AdminScope) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, adminScopes: true, adminViewOnly: true },
+  });
+  if (!user || user.adminViewOnly) return false;
   return user.role === "ADMIN" || user.adminScopes.includes(scope);
 }

@@ -91,6 +91,13 @@ model User {
   /// beheerder (Role.ADMIN) te zijn -- zie lib/dal.ts (requireAdminScope).
   /// Volledige beheerders omzeilen deze lijst altijd (zie requireAdminScope).
   adminScopes        AdminScope[]    @default([])
+  /// Kijktoegang zonder wijzigingsrechten (27 aug 2026) -- geldt over alle
+  /// toegewezen adminScopes heen: de gebruiker ziet die onderdelen wel
+  /// (requireAdminScope blijft werken), maar elke muterende server-actie
+  /// (requireAdminScopeWrite) weigert alsnog. Losstaand van adminScopes zelf,
+  /// zodat "alles zien, niets wijzigen" niet 8x los ingesteld hoeft te
+  /// worden. Zie lib/dal.ts.
+  adminViewOnly      Boolean         @default(false)
   /// TOTP-2FA (verplicht voor alle accounts, zie proxy.ts). totpSecretPending
   /// bewaart het secret tijdens een nog onbevestigde instelprocedure, apart
   /// van totpSecret zodat de status nooit dubbelzinnig is: geen van beide =

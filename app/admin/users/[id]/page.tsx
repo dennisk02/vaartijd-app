@@ -188,6 +188,16 @@ export default async function UserAssignmentsPage({ params }: { params: Promise<
                   </label>
                 ))}
               </div>
+              <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  name="adminViewOnly"
+                  defaultChecked={user.adminViewOnly}
+                  className="h-4 w-4 rounded border-slate-300 text-red-700 focus:ring-red-600"
+                />
+                Alleen kijktoegang (geldt over alle onderdelen hierboven heen — geen wijzigingen,
+                geen synchronisaties starten)
+              </label>
             </div>
           )}
 

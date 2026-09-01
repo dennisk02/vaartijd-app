@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getUser } from "@/lib/dal";
 import { getActiveTimer } from "@/lib/timer";
 import { getDailySummary } from "@/lib/daily-summary";
@@ -10,6 +11,15 @@ import { TimerWidget } from "@/components/timer-widget";
 
 export default async function DashboardPage() {
   const user = await getUser();
+
+  // Gebruikers met uitsluitend RENTMAN_FINANCIEEL-toegang (bv. Renko/Niels/
+  // Henry, 27 aug 2026) hebben niets aan dit medewerker-thuisscherm -- stuur
+  // ze direct door naar het dashboard zelf, zowel na inloggen (dit is de
+  // eerste pagina na login/2FA) als bij elke latere navigatie naar "/".
+  if (user.role !== "ADMIN" && user.adminScopes.length === 1 && user.adminScopes[0] === "RENTMAN_FINANCIEEL") {
+    redirect("/admin/rentman-financieel");
+  }
+
   const dict = getDictionary(user.language);
   const today = todayAtMidnight();
 

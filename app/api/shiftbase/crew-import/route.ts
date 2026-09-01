@@ -1,5 +1,5 @@
 import { getSessionPayload } from "@/lib/session";
-import { userHasAdminScope } from "@/lib/dal";
+import { userHasAdminScopeWrite } from "@/lib/dal";
 import { syncShiftbaseCrew } from "@/integrations/shiftbase/sync";
 import { ShiftbaseApiError } from "@/integrations/shiftbase/client";
 
@@ -18,7 +18,7 @@ async function isAuthorized(request: Request) {
 
   const session = await getSessionPayload();
   if (!session?.userId) return false;
-  return userHasAdminScope(session.userId, "SHIFTBASE");
+  return userHasAdminScopeWrite(session.userId, "SHIFTBASE");
 }
 
 async function handleImport(request: Request) {

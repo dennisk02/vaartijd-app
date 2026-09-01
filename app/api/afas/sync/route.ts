@@ -1,5 +1,5 @@
 import { getSessionPayload } from "@/lib/session";
-import { userHasAdminScope } from "@/lib/dal";
+import { userHasAdminScopeWrite } from "@/lib/dal";
 import { syncPendingTimeEntries } from "@/integrations/afas/hoursSync";
 
 export async function POST(request: Request) {
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     if (!session?.userId) {
       return new Response(null, { status: 401 });
     }
-    if (!(await userHasAdminScope(session.userId, "AFAS"))) {
+    if (!(await userHasAdminScopeWrite(session.userId, "AFAS"))) {
       return new Response(null, { status: 403 });
     }
   }
