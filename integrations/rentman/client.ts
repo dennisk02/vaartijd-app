@@ -245,3 +245,39 @@ export async function fetchInvoiceFileUrl(fileId: string): Promise<string | null
   const body = (await response.json()) as { data?: { url?: string } };
   return body.data?.url ?? null;
 }
+
+export type RentmanInvoiceLine = {
+  id: number | string;
+  ledgercode?: string | null;
+  ledger?: { displayname?: string | null } | null;
+  vatrate?: number | null;
+  vatamount?: number | null;
+  priceincl?: number | null;
+};
+
+/**
+ * Factuurregels van één factuur -- LET OP: dit zijn (per Rentmans eigen
+ * resource-omschrijving, bevestigd via een live testaanroep, 2 sep 2026)
+ * **gegenereerde grootboek-/btw-samenvattingsregels** ("Omzet verhuurde
+ * materialen"/8060, "Omzet transport"/8064, "Verzekering"/8068, ...), NIET
+ * de product-/dienstregels die op de factuur-PDF staan (dat hangt af van het
+ * gebruikte documentsjabloon en is niet via de API terug te halen). Voor de
+ * AFAS-pakbon-koppeling (§10.8, FbDeliveryNote) is dat juist bruikbaar: elke
+ * regel heeft al een grootboekcode + btw-tarief, precies wat een boeking
+ * nodig heeft -- de productdetails blijven zichtbaar via de bijgevoegde PDF.
+ * Bereikbaar via `/invoices/{id}/invoicelines`, bevestigd met het gewone
+ * RENTMAN_API_TOKEN (geen aparte top-level resource nodig).
+ */
+export async function fetchInvoiceLines(invoiceId: string): Promise<RentmanInvoiceLine[]> {
+  const token = process.env.RENTMAN_API_TOKEN;
+  if (!token) return [];
+
+  const response = await fetch(
+    `${RENTMAN_BASE}/invoices/${invoiceId}/invoicelines?fields=id,ledgercode,vatrate,vatamount,priceincl&expand=ledger`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!response.ok) return [];
+
+  const body = (await response.json()) as { data?: RentmanInvoiceLine[] };
+  return body.data ?? [];
+}

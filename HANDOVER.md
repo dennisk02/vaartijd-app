@@ -841,10 +841,7 @@ voormalige dashboard-tab) naar Rentman-status "Bevestigd" gingen. Hergebruikt
 `20260827180000_rentman_afas_create_tracking`) en voegt drie sync-statusvelden toe
 (`afasCreateStatus`/`afasCreateSyncedAt`/`afasCreateError`, migratie
 `20260902120000_rentman_afas_export`). Verzendlogica: `integrations/afas/projectSync.ts`
-(`sendProjectToAfas`/`sendSelectedProjectsToAfas`), env `AFAS_PROJECT_CONNECTOR` (nog leeg).
-**Let op:** de payload-veldnamen in `mapProjectToAfas()` zijn een beste-inschatting naar analogie
-van de uren-connector — **niet** bevestigd via `metainfo` (die connector bestaat nog niet) —
-verifieer/pas aan zodra Willem 'm vrijgeeft.
+(`sendProjectToAfas`/`sendSelectedProjectsToAfas`), env `AFAS_PROJECT_CONNECTOR`.
 
 **Tabblad 2 — Verkoopfacturen:** nieuw, er bestond nog geen per-factuur-opslag
 (`RentmanInvoicedMonthly`, §10.5, is een maandaggregaat). Nieuw model `RentmanInvoiceExport`
@@ -864,23 +861,51 @@ bijwerken"-knop op de pagina zelf.
   geldig) — de PDF-knop in de UI linkt naar `/api/rentman-afas/invoice-pdf/[id]`, een kleine
   route die opzoekt/doorverwijst i.p.v. de URL zelf op te slaan.
 - Verzendlogica: `integrations/afas/invoiceSync.ts` (`sendInvoiceToAfas`/
-  `sendSelectedInvoicesToAfas`), env `AFAS_INVOICE_CONNECTOR` (nog leeg). Haalt bij verzending de
-  PDF op en zet 'm om naar base64. **Let op, twee dingen hier zijn een aanname, geen bevestigd
-  feit:** (1) de payload-veldnamen zelf (`mapInvoiceToAfas()`), en (2) het `FileName`/
-  `FileStream`-bijlagepatroon — dat is AFAS' gebruikelijke manier om een bestand aan een
-  UpdateConnector-element te hangen, maar is voor déze (nog niet bestaande) connector niet apart
-  geverifieerd. Controleer beide via `metainfo/update/<connector>` zodra de connector bestaat,
-  net zoals dat voor de uren-connector is gedaan (§10.1).
+  `sendSelectedInvoicesToAfas`), env `AFAS_DELIVERY_NOTE_CONNECTOR`. Haalt bij verzending de PDF
+  op en zet 'm om naar base64.
+
+**2 sep 2026 — antwoord van Willem van Melis/Royaal, connectornamen + aanpak bevestigd:**
+- **Projecten → `PtProjects`.** Minimaal benodigde velden (in gewone taal, geen AFAS-veldcodes):
+  Projectomschrijving, Projectgroep, Projectnummer ("kan ook autonummering gebruikt worden").
+  `mapProjectToAfas()` gebruikt voorlopig `Ds`/`PrGr`/`PrId` als beste inschatting — **niet**
+  bevestigd via `metainfo` (die connector bestaat nog niet voor onze omgeving, gaf op 2 sep 2026
+  een 500). `Projectgroep` wordt afgeleid met de al bestaande, door de klant bevestigde
+  administratie-routing (§10.4/§10.2: naam begint met "EVENTO - " → 21, anders → 02) — een
+  aanname dat die twee dingen 1-op-1 hetzelfde zijn, nog niet apart geverifieerd.
+  **Open vraag, nog te beslissen:** zelf het Rentman-projectnummer meesturen (voor
+  traceerbaarheid/koppeling terug) of AFAS' eigen autonummering laten gebruiken? Code stuurt nu
+  het Rentman-nummer mee.
+- **Verkoopfacturen → geen directe factuur-connector, maar `FbDeliveryNote`.** Willems
+  voorkeursmethode: een gereed gemelde **pakbon** aanmaken (met de factuur-PDF als bijlage
+  toegevoegd), die AFAS zelf omzet naar een verkoopfactuur — vandaar de hernoeming van
+  `AFAS_INVOICE_CONNECTOR` naar **`AFAS_DELIVERY_NOTE_CONNECTOR`** (2 sep 2026). `mapInvoiceToAfas()`
+  gebruikt voorlopig `OrNu`/`Date`/`ExternalProjectId`/`Reported` + regels — eveneens **niet**
+  bevestigd via `metainfo`.
+  - Willem vroeg expliciet: *"hebben we meer zicht nodig op hoe Rentman de data aanbiedt: is er
+    iets bekend van de API van Rentman?"* — **beantwoord** (2 sep 2026, zie
+    `integrations/rentman/client.ts` en hierboven): Rentman levert per factuur wél een los,
+    los-op-te-halen PDF (via `files`, bevestigd werkend), maar de `invoicelines`-resource geeft
+    **geen** product-/dienstregels zoals op de PDF — dat zijn gegenereerde **grootboek-/
+    btw-samenvattingsregels** (bv. "Omzet verhuurde materialen"/grootboek 8060, 21% btw,
+    "Omzet transport"/8064, "Verzekering"/8068 zonder btw), rechtstreeks bereikbaar via
+    `/invoices/{id}/invoicelines` (`fetchInvoiceLines()`, nieuw). Dat sluit juist goed aan bij
+    een boeking (elke regel heeft al een grootboekcode + btw-tarief) — de productdetails blijven
+    zichtbaar via de bijgevoegde PDF, niet via de API.
+  - **Nog niet bevestigd:** of het `FileName`/`FileStream`-bijlagepatroon in `mapInvoiceToAfas()`
+    ook echt geldt voor `FbDeliveryNote` (dat is AFAS' gebruikelijke generieke manier om een
+    bestand aan een UpdateConnector-element te hangen, maar niet apart voor déze connector
+    geverifieerd) — controleer via `metainfo/update/FbDeliveryNote` zodra beschikbaar.
 
 **Toegang:** gated op `AdminScope.AFAS` (niet een nieuwe scope-waarde) — bewuste keuze omdat dit
 feitelijk de Rentman→AFAS-brug is. Gevolg: Niels/Henry/Renko (§17) die alleen
 `RENTMAN_FINANCIEEL` hebben, zien deze nieuwe pagina niet vanzelf — een beheerder moet ze
 desgewenst ook de scope "AFAS-koppeling" geven via `/admin/users/[id]`.
 
-**Nog te doen (nadat Willem connectors vrijgeeft):** de twee `mapXToAfas()`-payloads verifiëren/
-aanpassen aan de echte `metainfo`, en dan simpelweg `AFAS_PROJECT_CONNECTOR`/
-`AFAS_INVOICE_CONNECTOR` invullen — verder is er geen codewijziging nodig, de UI/wachtrij/
-sync-statuslogica staat al.
+**Nog te doen (nadat Willem de twee connectors autoriseert):** de twee `mapXToAfas()`-payloads
+verifiëren/aanpassen aan de echte `metainfo` (velden én, voor facturen, het bijlage-patroon), de
+open vraag over projectnummer vs. autonummering beslissen, en dan simpelweg
+`AFAS_PROJECT_CONNECTOR`/`AFAS_DELIVERY_NOTE_CONNECTOR` invullen — verder is er geen
+codewijziging nodig, de UI/wachtrij/sync-statuslogica staat al.
 
 ---
 
@@ -899,8 +924,8 @@ Volledige, actuele lijst — zie ook [`.env.example`](.env.example).
 | `AFAS_HOURS_CONNECTOR` | optioneel | Naam van de AFAS UpdateConnector voor uren (`PtRealization`, Amerikaanse spelling — zie §10.1) |
 | `AFAS_HOURS_ITEM_CODE` / `AFAS_HOURS_STATUS_ID` | optioneel | Vaste ItCd/StId-waarden, zie §10.1 — fallback `"300"`/`"1"` |
 | `AFAS_SYNC_SECRET` | optioneel | Secret voor externe trigger van `/api/afas/sync` |
-| `AFAS_PROJECT_CONNECTOR` | optioneel | Naam van de (nog niet geautoriseerde) AFAS UpdateConnector voor projectaanmaak, zie §10.8 |
-| `AFAS_INVOICE_CONNECTOR` | optioneel | Naam van de (nog niet geautoriseerde) AFAS UpdateConnector voor verkoopboekingen, zie §10.8 |
+| `AFAS_PROJECT_CONNECTOR` | optioneel | Naam van de (nog niet geautoriseerde) AFAS UpdateConnector voor projectaanmaak — bevestigd: `PtProjects`, zie §10.8 |
+| `AFAS_DELIVERY_NOTE_CONNECTOR` | optioneel | Naam van de (nog niet geautoriseerde) AFAS UpdateConnector voor gereed gemelde pakbonnen (waaruit AFAS verkoopfacturen maakt) — bevestigd: `FbDeliveryNote`, zie §10.8 |
 | `SHIFTBASE_API_KEY` | optioneel | Shiftbase API-sleutel — **ingevuld in productie, lezen werkt** |
 | `SHIFTBASE_BASE_URL` | optioneel | Override van de standaard Shiftbase-basis-URL |
 | `SHIFTBASE_SYNC_SECRET` | optioneel | Secret voor externe trigger van `/api/shiftbase/sync` |

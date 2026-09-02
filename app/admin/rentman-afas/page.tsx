@@ -33,7 +33,7 @@ export default async function RentmanAfasPage() {
   ]);
 
   const projectConnectorConfigured = Boolean(process.env.AFAS_PROJECT_CONNECTOR);
-  const invoiceConnectorConfigured = Boolean(process.env.AFAS_INVOICE_CONNECTOR);
+  const invoiceConnectorConfigured = Boolean(process.env.AFAS_DELIVERY_NOTE_CONNECTOR);
 
   return (
     <div className="flex flex-col gap-6">

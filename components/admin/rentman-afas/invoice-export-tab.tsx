@@ -27,12 +27,12 @@ export function InvoiceExportTab({ rows, connectorConfigured }: { rows: InvoiceE
   return (
     <div className="flex flex-col gap-3.5">
       <p className="text-sm text-slate-500">
-        Verkoopfacturen van de afgelopen week, meest recent bovenaan. Vink aan welke als verkoopboeking (met PDF)
-        naar AFAS moeten.
+        Verkoopfacturen van de afgelopen week, meest recent bovenaan. Vink aan welke als gereed gemelde pakbon
+        (met PDF) naar AFAS moeten -- AFAS zet die zelf om naar een verkoopfactuur.
         {!connectorConfigured && (
           <>
             {" "}
-            Er is nog geen geautoriseerde AFAS-connector voor verkoopboekingen (<code>AFAS_INVOICE_CONNECTOR</code>,
+            Er is nog geen geautoriseerde AFAS-connector voor pakbonnen (<code>AFAS_DELIVERY_NOTE_CONNECTOR</code>,
             zie HANDOVER §10.8) -- checklist, PDF-koppeling en verzendknop werken al, &quot;Verzenden&quot; zet
             elke geselecteerde factuur voorlopig op wachtend met een uitlegtekst.
           </>

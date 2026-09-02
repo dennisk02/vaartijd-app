@@ -506,9 +506,10 @@ model RentmanInvoiceExport {
   /// Handmatig geselecteerd als "klaar om naar AFAS door te zetten" -- zelfde
   /// wachtrij-patroon als ProjectRentmanLink.afasCreateRequestedAt.
   afasCreateRequestedAt DateTime?
-  /// Status van de daadwerkelijke boekings-poging in AFAS (integrations/afas/
-  /// invoiceSync.ts). Blijft PENDING met uitleg in afasCreateError zolang er
-  /// geen AFAS_INVOICE_CONNECTOR is ingesteld.
+  /// Status van de daadwerkelijke pakbon-aanmaak-poging in AFAS (integrations/
+  /// afas/invoiceSync.ts, FbDeliveryNote-connector). Blijft PENDING met
+  /// uitleg in afasCreateError zolang er geen AFAS_DELIVERY_NOTE_CONNECTOR is
+  /// ingesteld.
   afasCreateStatus      SyncStatus @default(PENDING)
   afasCreateSyncedAt    DateTime?
   afasCreateError       String?
