@@ -2,6 +2,7 @@ import { getSessionPayload } from "@/lib/session";
 import { userHasAdminScopeWrite } from "@/lib/dal";
 import { syncRentmanProjects } from "@/integrations/rentman/sync";
 import { syncRentmanDashboard } from "@/integrations/rentman/dashboardSync";
+import { syncRecentRentmanInvoices } from "@/integrations/rentman/invoiceExportSync";
 import { RentmanApiError } from "@/integrations/rentman/client";
 
 async function isAuthorized(request: Request) {
@@ -45,7 +46,18 @@ async function handleSync(request: Request) {
     dashboardResult = { error: message };
   }
 
-  return Response.json({ project: projectResult, dashboard: dashboardResult });
+  // Ook los geprobeerd/gerapporteerd: het verkoopfacturen-overzicht voor de
+  // Rentman -> AFAS-pagina (§10.8) -- een fout hier mag de andere twee syncs
+  // niet raken, en andersom.
+  let invoiceExportResult: { invoiceCount: number } | { error: string };
+  try {
+    invoiceExportResult = await syncRecentRentmanInvoices();
+  } catch (error) {
+    const message = error instanceof RentmanApiError ? error.message : "Onbekende fout bij ophalen van facturen.";
+    invoiceExportResult = { error: message };
+  }
+
+  return Response.json({ project: projectResult, dashboard: dashboardResult, invoiceExport: invoiceExportResult });
 }
 
 export async function GET(request: Request) {

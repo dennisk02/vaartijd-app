@@ -180,3 +180,68 @@ export async function fetchAllInvoicesForDashboard(year: number) {
     "date[lt]": `${year + 1}-01-01T00:00:00+00:00`,
   });
 }
+
+export type RentmanInvoiceForExport = {
+  id: number | string;
+  date?: string | null;
+  displayname?: string | null;
+  price?: number | string | null;
+  price_invat?: number | string | null;
+  project?: { number?: number | string; name?: string } | null;
+  customer?: { name?: string } | null;
+};
+
+/**
+ * Facturen sinds `sinceIso` met project/klant erbij geëxpandeerd, voor het
+ * "Verkoopfacturen naar AFAS"-overzicht (§18). `displayname` en `price_invat`
+ * zijn "generated" velden in Rentman -- niet filterbaar/sorteerbaar, maar wel
+ * gewoon opvraagbaar via `fields=`, bevestigd via een live testaanroep
+ * (2 sep 2026).
+ */
+export async function fetchRecentInvoicesForExport(sinceIso: string) {
+  return rentmanFetchAll<RentmanInvoiceForExport>("invoices", {
+    expand: "project,customer",
+    fields: "id,date,displayname,price,price_invat,project,customer",
+    "date[gte]": sinceIso,
+  });
+}
+
+export type RentmanInvoiceFile = {
+  id: number | string;
+  file_item?: number | string | null;
+  file_itemtype?: string | null;
+};
+
+/**
+ * Alle Factuur-gekoppelde files sinds `sinceIso`, voor het koppelen van een
+ * PDF aan elke factuur uit fetchRecentInvoicesForExport (via `file_item` =
+ * factuur-id). Platte querysleutels (`file_itemtype=Factuur`), geen
+ * `filter[...]`-wrapper -- die laatste geeft een 400 "Wrong syntax in query"
+ * (bevestigd via een live test, 2 sep 2026).
+ */
+export async function fetchAllInvoiceFilesSince(sinceIso: string) {
+  return rentmanFetchAll<RentmanInvoiceFile>("files", {
+    fields: "id,file_item,file_itemtype",
+    file_itemtype: "Factuur",
+    "created[gte]": sinceIso,
+  });
+}
+
+/**
+ * Tijdelijke, getekende download-URL (S3, ~10 uur geldig) voor één file-ID --
+ * bevestigd te werken met het gewone RENTMAN_API_TOKEN, geen MCP/gebruikers-
+ * login nodig (in tegenstelling tot een eerdere, onjuiste aanname in
+ * HANDOVER §10.4, gecorrigeerd 2 sep 2026).
+ */
+export async function fetchInvoiceFileUrl(fileId: string): Promise<string | null> {
+  const token = process.env.RENTMAN_API_TOKEN;
+  if (!token) return null;
+
+  const response = await fetch(`${RENTMAN_BASE}/files/${fileId}?fields=id,url`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) return null;
+
+  const body = (await response.json()) as { data?: { url?: string } };
+  return body.data?.url ?? null;
+}

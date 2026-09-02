@@ -2,7 +2,7 @@
 
 **Voor:** de partij die onderhoud en verdere ontwikkeling van deze app overneemt.
 **Opdrachtgever:** Kuipers Beheer BV ([info@kuipersbeheerbv.nl](mailto:info@kuipersbeheerbv.nl))
-**Laatst bijgewerkt:** 21 augustus 2026
+**Laatst bijgewerkt:** 2 september 2026
 **Productie-URL:** https://vaartijd-app.vercel.app
 
 Dit document is de centrale referentie voor iedereen die na de initiële bouw aan deze app
@@ -199,6 +199,16 @@ Volledige bron: [`prisma/schema.prisma`](prisma/schema.prisma). Kernpunten per m
 - **`RentmanInvoicedMonthly`** — apart van `RentmanSubprojectSnapshot` omdat dit op
   **factuurdatum** groepeert i.p.v. aanmaakdatum (voor de Maandoverleg-sectie op het
   Overzicht-tabblad/AFAS-aansluiting).
+- **`RentmanInvoiceExport`** — één rij per Rentman-verkoopfactuur (§10.8, `/admin/rentman-afas`),
+  incl. gekoppelde PDF (`pdfFileId`) en checklist-/AFAS-sync-status. Losstaand van
+  `RentmanInvoicedMonthly` hierboven (dat blijft een maandaggregaat).
+
+> **Let op:** de bovenstaande beschrijving van `User`/`Project`/`Ship`/`TimeEntry` dateert van
+> vóór §10.6 (27 aug 2026) — de genoemde koppelvelden (`afasEmployeeNumber`,
+> `rentmanSubprojectId`, `afasSyncStatus`, `shiftbaseTimesheetId`, ...) staan inmiddels niet meer
+> op deze kernmodellen zelf, maar in de 8 losse 1-op-1-koppeltabellen uit §10.6
+> (`ProjectRentmanLink`, `TimeEntryAfasLink`, enz.). Deze sectie is destijds niet meegewerkt —
+> zie `prisma/schema.prisma` voor de actuele, juiste vorm.
 
 **Indexen:** naast de voor de hand liggende unieke constraints staan er `@@index`'en op
 `TimeEntry(userId, date)`, `TimeEntry(afasSyncStatus)`, `TimeEntry(shiftbaseSyncStatus)` en op
@@ -579,8 +589,13 @@ hierboven), en zodra AFAS een betaling registreert, die betaalstatus terugzetten
   `invoices`, `invoicelines`, `payments`, `files`, `projects`, `subprojects`, etc.
 - **Factuur-PDF ophalen werkt**: via de `files`-resource, gefilterd op
   `file_item = <invoice id>` + `file_itemtype = "Factuur"` → een tijdelijk getekende S3-URL.
-  (De platte REST-API met een los token gaf hier een 403 — vermoedelijk tokenscope-beperking;
-  de MCP-weg werkt wél.)
+  **Correctie (2 sep 2026):** eerder stond hier dat dit alleen via de MCP-weg werkte en de
+  platte REST-API met een los token een 403 gaf — dat bleek onjuist. De 403 kwam door verkeerde
+  filter-syntax (`filter[file_item]=...`, wat een 400 "Wrong syntax in query" geeft); met platte
+  querysleutels (`file_item=<id>&file_itemtype=Factuur`, zelfde patroon als `modified[gte]`
+  elders) werkt dit gewoon met `RENTMAN_API_TOKEN`, bevestigd met een live testaanroep die ook de
+  PDF-bytes (via de teruggegeven getekende S3-URL) daadwerkelijk downloadde. Zie §10.8 voor de
+  module die dit gebruikt (`integrations/rentman/client.ts`: `fetchAllInvoiceFilesSince`/`fetchInvoiceFileUrl`).
 - **Betaling terugschrijven naar Rentman** kan via `invoices` → actie `create_payments`
   (velden: `moment`, `amount`, `description`, `payment_import_source`), of via de losse
   `payments`-resource (`update`-actie). **Nog niet getest** — dat raakt echte financiële data
@@ -600,14 +615,19 @@ hierboven), en zodra AFAS een betaling registreert, die betaalstatus terugzetten
   beperking. Dus: bouw het, maar laat een testrun op één niet-kritieke factuur eerst goedkeuren.
 
 **Nog te doen:**
-1. AFAS-token laten aanleveren door de klant, connectors verkennen.
-2. Prisma-model(len) voor "welke Rentman-facturen zijn al naar AFAS geëxporteerd" (sync-status
-   + AFAS-boekingsreferentie, naar het patroon van `TimeEntry.afasSyncStatus`).
-3. Sync-module analoog aan `integrations/rentman/sync.ts`: facturen ophalen (MCP of REST), PDF ophalen,
-   AFAS UpdateConnector-payload bouwen + PDF meesturen, boeken, status bijwerken.
+1. AFAS-token laten aanleveren door de klant, connectors verkennen. *(Deels gedaan: de
+   uren-connector is bevestigd en werkt, §10.1 — een verkoopboekings-connector is nog niet
+   geautoriseerd.)*
+2. ~~Prisma-model(len) voor "welke Rentman-facturen zijn al naar AFAS geëxporteerd"~~ **gedaan**
+   (`RentmanInvoiceExport`, §10.8).
+3. ~~Sync-module: facturen ophalen (MCP of REST), PDF ophalen~~ **gedaan** (via het gewone
+   REST-token, zie de correctie hierboven; §10.8) — **nog niet gedaan:** het daadwerkelijke
+   "AFAS UpdateConnector-payload bouwen + boeken" (de payload-functie bestaat al als
+   beste-inschatting, maar er is nog geen connector om 'm tegenaan te testen).
 4. Betaal-terugkoppeling: AFAS-kant lezen (welke boekingen zijn betaald sinds vorige run) →
-   `invoices.create_payments` in Rentman.
-5. Cron-route + admin-dashboardpagina, zelfde stijl als `/admin/rentman`.
+   `invoices.create_payments` in Rentman. *(Nog niet opgepakt.)*
+5. ~~Cron-route + admin-dashboardpagina~~ **gedaan** (`/admin/rentman-afas`, §10.8) — wél zonder
+   werkende AFAS-koppeling, puur klaargezet.
 
 ### 10.5 Rentman financieel dashboard (`/admin/rentman-financieel`) — **werkend**
 
@@ -674,8 +694,8 @@ hieronder) — alle drie afgeleid in `dashboardSync.ts` (`cityOf`/`businessUnitO
   omzet nooit meetelt in de actieve omzettotalen. Verwacht dat dit KPI-getal van dag tot dag
   merkbaar springt (elke nieuwe annulering met een groot offertebedrag telt direct mee) — dat is
   correct/gewenst gedrag voor een "live" dashboard, geen bug.
-- **6 tabbladen** (5 exact als het referentiedashboard v6.1 "samengevoegd", plus een 6e eigen
-  tabblad — zie onder) — bijgewerkt 25 aug 2026
+- **5 tabbladen** (exact als het referentiedashboard v6.1 "samengevoegd" — zie onder) —
+  bijgewerkt 25 aug 2026
   na vergelijking met een nieuwe referentie-export (`rentman_dashboard_v6_1.html`), die zelf ook
   "Maandoverleg" niet meer als apart tabblad had en een nieuwe "BV & Categorie"-sectie toevoegde:
   1. **Overzicht** — 5 KPI's (Projecten, Projectomzet, Gefactureerd %, In optie, Direct opvolgen),
@@ -710,19 +730,8 @@ hieronder) — alle drie afgeleid in `dashboardSync.ts` (`cityOf`/`businessUnitO
      maandkiezer met tabel van geannuleerde projecten (#, Project, Locatie, Reden annulering,
      Gederfde omzet) gesorteerd op offertebedrag. "Reden annulering" toont altijd "niet bekend"
      (net als v6.1) — geen custom veld in Rentman, zie de Callout op dit tabblad.
-  6. **🏗️ Naar AFAS** (27 aug 2026, eigen toevoeging, geen onderdeel van v6.1) — projecten die
-     de afgelopen maand naar Rentman-status "Bevestigd" gingen, meest recent bovenaan, met een
-     aanvinkbare checklist ("klaar om door te zetten naar AFAS"). Puur een wachtrij/checklist:
-     er is nog geen geautoriseerde AFAS-UpdateConnector voor projectaanmaak (zie §10.4/§17), dus
-     "aanvinken" stuurt bewust niets naar AFAS — het markeert alleen welke al meegenomen zijn,
-     zodat dat in één keer kan zodra die koppeling er wél is. Databronnen: nieuwe velden op
-     `ProjectRentmanLink` (migratie `20260827180000_rentman_afas_create_tracking`):
-     `rentmanStatusChangedAt` (alleen bijgewerkt bij een écht andere status, niet bij elke sync —
-     zie `integrations/rentman/sync.ts`) en `afasCreateRequestedAt` (de checkbox-staat, via
-     `toggleAfasCreateRequested()` in `integrations/actions/rentman-dashboard.ts`). Bij de
-     introductie eenmalig teruggevuld met Rentmans eigen `modified`-veld als benadering (geen
-     echte statuswijzigingshistorie beschikbaar van vóór dit veld bestond) — vanaf nu is het wel
-     exact.
+  *(Een 6e tabblad, "🏗️ Naar AFAS", stond hier tussen 27 aug en 2 sep 2026 — op uitdrukkelijk
+  verzoek van de klant verplaatst naar een losse pagina, zie §10.8.)*
 - **Donker thema (25 aug 2026)** — de klant leverde een tweede stijlgids aan
   (`instructie_dashboardstijl_vaartijden.md`) met een donker kleurenschema (`--bg #0f1115`,
   panelen `#171a21`/`#1e222b`, 4 semantische kleuren blauw/groen/oranje/rood) en vroeg dit
@@ -817,6 +826,62 @@ puur een `git mv` + import-paden bijwerken, geen logicawijziging.
   API-contract met de rest van Vaartijd) — volgt pas ná de twee prioriteitskoppelingen (§10.4),
   zoals het 4-stappenplan voorschrijft.
 
+### 10.8 Rentman → AFAS overzicht/wachtrij (`/admin/rentman-afas`) — **klaargezet, wacht op connectors**
+
+Losse pagina (2 sep 2026), bewust **niet** onderdeel van het financiële dashboard (§10.5) — op
+uitdrukkelijk verzoek van de klant ("niet in het dashboard"). Twee tabbladen, allebei met
+dezelfde opzet: een checklist ("klaar voor AFAS") + een al aangesloten verzendknop die pas echt
+iets naar AFAS stuurt zodra de bijbehorende UpdateConnector bestaat — tot die tijd zet
+"Verzenden" elke poging op `PENDING` met een duidelijke uitlegtekst, in plaats van een echte
+AFAS-aanroep te doen (zelfde voorzichtige patroon als overal elders in deze integratie).
+
+**Tabblad 1 — Projecten:** projecten die de **afgelopen week** (niet meer een maand, zoals de
+voormalige dashboard-tab) naar Rentman-status "Bevestigd" gingen. Hergebruikt
+`ProjectRentmanLink.rentmanStatusChangedAt`/`afasCreateRequestedAt` (§10.5/migratie
+`20260827180000_rentman_afas_create_tracking`) en voegt drie sync-statusvelden toe
+(`afasCreateStatus`/`afasCreateSyncedAt`/`afasCreateError`, migratie
+`20260902120000_rentman_afas_export`). Verzendlogica: `integrations/afas/projectSync.ts`
+(`sendProjectToAfas`/`sendSelectedProjectsToAfas`), env `AFAS_PROJECT_CONNECTOR` (nog leeg).
+**Let op:** de payload-veldnamen in `mapProjectToAfas()` zijn een beste-inschatting naar analogie
+van de uren-connector — **niet** bevestigd via `metainfo` (die connector bestaat nog niet) —
+verifieer/pas aan zodra Willem 'm vrijgeeft.
+
+**Tabblad 2 — Verkoopfacturen:** nieuw, er bestond nog geen per-factuur-opslag
+(`RentmanInvoicedMonthly`, §10.5, is een maandaggregaat). Nieuw model `RentmanInvoiceExport`
+(zelfde migratie), gevuld door `integrations/rentman/invoiceExportSync.ts`
+(`syncRecentRentmanInvoices()`, venster van 60 dagen als veiligheidsmarge — de pagina zelf
+toont alleen de laatste week), die op zijn beurt twee nieuwe client-functies gebruikt
+(`integrations/rentman/client.ts`): `fetchRecentInvoicesForExport` (facturen incl. geëxpandeerd
+project/klant) en `fetchAllInvoiceFilesSince` (gekoppelde PDF's). Draait automatisch mee op de
+bestaande Rentman-cron (`app/api/rentman/sync/route.ts`, los try/catch) én via een "Facturen nu
+bijwerken"-knop op de pagina zelf.
+- **Correctie van een eerdere aanname (§10.4):** de factuur-PDF blijkt gewoon ophaalbaar met het
+  gewone `RENTMAN_API_TOKEN` — de eerder aangenomen 403/MCP-only-beperking kwam door verkeerde
+  filter-syntax, niet door een tokenscope-probleem. Bevestigd met een live testaanroep
+  (`file_item=<id>&file_itemtype=Factuur`, platte querysleutels — geen `filter[...]`-wrapper) die
+  ook daadwerkelijk de PDF-bytes downloadde via de teruggegeven getekende S3-URL.
+  `fetchInvoiceFileUrl(fileId)` haalt bij elke download een verse URL op (die is maar ~10 uur
+  geldig) — de PDF-knop in de UI linkt naar `/api/rentman-afas/invoice-pdf/[id]`, een kleine
+  route die opzoekt/doorverwijst i.p.v. de URL zelf op te slaan.
+- Verzendlogica: `integrations/afas/invoiceSync.ts` (`sendInvoiceToAfas`/
+  `sendSelectedInvoicesToAfas`), env `AFAS_INVOICE_CONNECTOR` (nog leeg). Haalt bij verzending de
+  PDF op en zet 'm om naar base64. **Let op, twee dingen hier zijn een aanname, geen bevestigd
+  feit:** (1) de payload-veldnamen zelf (`mapInvoiceToAfas()`), en (2) het `FileName`/
+  `FileStream`-bijlagepatroon — dat is AFAS' gebruikelijke manier om een bestand aan een
+  UpdateConnector-element te hangen, maar is voor déze (nog niet bestaande) connector niet apart
+  geverifieerd. Controleer beide via `metainfo/update/<connector>` zodra de connector bestaat,
+  net zoals dat voor de uren-connector is gedaan (§10.1).
+
+**Toegang:** gated op `AdminScope.AFAS` (niet een nieuwe scope-waarde) — bewuste keuze omdat dit
+feitelijk de Rentman→AFAS-brug is. Gevolg: Niels/Henry/Renko (§17) die alleen
+`RENTMAN_FINANCIEEL` hebben, zien deze nieuwe pagina niet vanzelf — een beheerder moet ze
+desgewenst ook de scope "AFAS-koppeling" geven via `/admin/users/[id]`.
+
+**Nog te doen (nadat Willem connectors vrijgeeft):** de twee `mapXToAfas()`-payloads verifiëren/
+aanpassen aan de echte `metainfo`, en dan simpelweg `AFAS_PROJECT_CONNECTOR`/
+`AFAS_INVOICE_CONNECTOR` invullen — verder is er geen codewijziging nodig, de UI/wachtrij/
+sync-statuslogica staat al.
+
 ---
 
 ## 11. Environment variables
@@ -831,9 +896,11 @@ Volledige, actuele lijst — zie ook [`.env.example`](.env.example).
 | `AFAS_ENVIRONMENT_ID` | optioneel | AFAS-omgevingscode — **al ingevuld in productie** |
 | `AFAS_OAUTH_CLIENT_ID` | optioneel | OAuth2 client-credentials, aangeleverd door Royaal (24 aug 2026) |
 | `AFAS_OAUTH_CLIENT_SECRET` | optioneel | Idem — behandel als wachtwoord, nooit loggen |
-| `AFAS_HOURS_CONNECTOR` | optioneel | Naam van de AFAS UpdateConnector voor uren (`PtRealisation`) |
+| `AFAS_HOURS_CONNECTOR` | optioneel | Naam van de AFAS UpdateConnector voor uren (`PtRealization`, Amerikaanse spelling — zie §10.1) |
 | `AFAS_HOURS_ITEM_CODE` / `AFAS_HOURS_STATUS_ID` | optioneel | Vaste ItCd/StId-waarden, zie §10.1 — fallback `"300"`/`"1"` |
 | `AFAS_SYNC_SECRET` | optioneel | Secret voor externe trigger van `/api/afas/sync` |
+| `AFAS_PROJECT_CONNECTOR` | optioneel | Naam van de (nog niet geautoriseerde) AFAS UpdateConnector voor projectaanmaak, zie §10.8 |
+| `AFAS_INVOICE_CONNECTOR` | optioneel | Naam van de (nog niet geautoriseerde) AFAS UpdateConnector voor verkoopboekingen, zie §10.8 |
 | `SHIFTBASE_API_KEY` | optioneel | Shiftbase API-sleutel — **ingevuld in productie, lezen werkt** |
 | `SHIFTBASE_BASE_URL` | optioneel | Override van de standaard Shiftbase-basis-URL |
 | `SHIFTBASE_SYNC_SECRET` | optioneel | Secret voor externe trigger van `/api/shiftbase/sync` |
@@ -956,7 +1023,9 @@ Het financiële Rentman-dashboard (§10.5) heeft **bewust geen eigen cron-job** 
 zou de Hobby-limiet overschrijden. In plaats daarvan roept `/api/rentman/sync` na de bestaande
 `syncRentmanProjects()` ook `syncRentmanDashboard()` aan (los try/catch, gecombineerde
 JSON-respons `{ project, dashboard }`), zodat beide 's nachts meeliften op dezelfde 03:00 UTC
-cron-run.
+cron-run. Sinds §10.8 (2 sep 2026) doet diezelfde route er een derde, eveneens los try/catch'te
+stap bij: `syncRecentRentmanInvoices()` (respons-sleutel `invoiceExport`), voor het
+verkoopfacturen-overzicht op `/admin/rentman-afas`.
 
 ---
 

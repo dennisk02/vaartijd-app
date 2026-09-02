@@ -307,6 +307,13 @@ model ProjectRentmanLink {
   /// geautoriseerde AFAS-UpdateConnector voor projectaanmaak is (zie
   /// HANDOVER.md §10.4/§17); null = niet geselecteerd.
   afasCreateRequestedAt  DateTime?
+  /// Status van de daadwerkelijke aanmaak-poging in AFAS (integrations/afas/
+  /// projectSync.ts). Blijft PENDING met een uitlegtekst in afasCreateError
+  /// zolang er geen AFAS_PROJECT_CONNECTOR is ingesteld -- de verzendknop
+  /// bestaat al, alleen de connector aan AFAS-zijde ontbreekt nog (2 sep 2026).
+  afasCreateStatus       SyncStatus @default(PENDING)
+  afasCreateSyncedAt     DateTime?
+  afasCreateError        String?
 }
 
 /// AFAS-projectcode, handmatig ingesteld door een beheerder (voor de
@@ -461,5 +468,53 @@ model RentmanInvoicedMonthly {
   month         String   @unique
   invoicedExclVat Decimal @db.Decimal(12, 2)
   computedAt    DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Rentman -> AFAS overzicht/wachtrij (2 sep 2026, zie HANDOVER.md §17-18).
+// Losse pagina (/admin/rentman-afas), bewust apart van het financiële
+// dashboard hierboven. Twee onderdelen: recent bevestigde projecten (leest
+// ProjectRentmanLink hierboven, geen eigen tabel nodig) en recente
+// verkoopfacturen (wel een eigen tabel, want er bestond nog geen
+// per-factuur-opslag -- RentmanInvoicedMonthly hierboven is een maand-
+// aggregaat). Beide met een checklist ("klaar voor AFAS") en een al
+// aangesloten (maar nog PENDING/ERROR, want de AFAS-connector ontbreekt nog)
+// verzendfunctie, zodat alleen die laatste stap hoeft te worden ingevuld
+// zodra Willem een UpdateConnector vrijgeeft.
+// ---------------------------------------------------------------------------
+
+/// Eén rij per Rentman-verkoopfactuur, ververst via syncRecentRentmanInvoices()
+/// (integrations/rentman/invoiceExportSync.ts) -- op elke sync een venster van
+/// enkele weken opnieuw opgehaald, net als bij ProjectRentmanLink hierboven.
+model RentmanInvoiceExport {
+  id                    String     @id @default(cuid())
+  rentmanInvoiceId      String     @unique
+  /// Uit Rentmans gegenereerde `displayname` ("Factuur V21260350") gehaald --
+  /// er is geen los "nummer"-veld op de invoices-resource zelf.
+  invoiceNumber         String?
+  invoiceDate           DateTime?
+  amountExclVat         Decimal?   @db.Decimal(12, 2)
+  amountInclVat         Decimal?   @db.Decimal(12, 2)
+  rentmanProjectNumber  String?
+  projectName           String?
+  customerName          String?
+  /// Rentman-file-ID van de gekoppelde factuur-PDF (files-resource, filter
+  /// file_item=<factuur-id>&file_itemtype=Factuur) -- bevestigd te werken via
+  /// het gewone RENTMAN_API_TOKEN (2 sep 2026, zie HANDOVER §10.4). Null als
+  /// er (nog) geen PDF gevonden is.
+  pdfFileId             String?
+  /// Handmatig geselecteerd als "klaar om naar AFAS door te zetten" -- zelfde
+  /// wachtrij-patroon als ProjectRentmanLink.afasCreateRequestedAt.
+  afasCreateRequestedAt DateTime?
+  /// Status van de daadwerkelijke boekings-poging in AFAS (integrations/afas/
+  /// invoiceSync.ts). Blijft PENDING met uitleg in afasCreateError zolang er
+  /// geen AFAS_INVOICE_CONNECTOR is ingesteld.
+  afasCreateStatus      SyncStatus @default(PENDING)
+  afasCreateSyncedAt    DateTime?
+  afasCreateError       String?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  @@index([invoiceDate])
 }
 

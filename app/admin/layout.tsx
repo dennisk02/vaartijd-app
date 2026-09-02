@@ -11,6 +11,7 @@ const tabs: { href: string; label: string; scope: AdminScope }[] = [
   { href: "/admin/users", label: "Medewerkers", scope: "USERS" },
   { href: "/admin/rentman", label: "Rentman", scope: "RENTMAN" },
   { href: "/admin/rentman-financieel", label: "Rentman financieel", scope: "RENTMAN_FINANCIEEL" },
+  { href: "/admin/rentman-afas", label: "Rentman → AFAS", scope: "AFAS" },
   { href: "/admin/afas", label: "AFAS-koppeling", scope: "AFAS" },
   { href: "/admin/shiftbase", label: "Shiftbase", scope: "SHIFTBASE" },
 ];
