@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   fetchAllSubprojectsFinancial,
   fetchAllInvoicesForDashboard,
+  businessUnitFor,
   type RentmanFinancialSubproject,
 } from "@/integrations/rentman/client";
 
@@ -39,19 +40,9 @@ function cancelledRevenueOf(sp: RentmanFinancialSubproject): number | null {
   return Number(sp.project_total_price_cancelled ?? 0);
 }
 
-/**
- * Business unit: projectnaam start met "EVENTO" -> EVENTO; anders bepaald
- * via het magazijn (`asset_location_from`, bv. "/stocklocations/4"):
- * /stocklocations/4 -> M&R Utrecht, /stocklocations/1 -> M&R Kampen,
- * onbekend/leeg (bv. oude projecten van vóór de magazijn-koppeling) valt
- * terug op M&R Kampen. Rechtstreeks overgenomen uit het referentiedashboard
- * (v6.1), waar dit expliciet als correcte fallback bevestigd is.
- */
-function businessUnitOf(sp: RentmanFinancialSubproject): string {
-  if (sp.name.trim().toUpperCase().startsWith("EVENTO")) return "EVENTO";
-  if (sp.asset_location_from === "/stocklocations/4") return "M&R Utrecht";
-  return "M&R Kampen";
-}
+// businessUnitFor() verhuisde naar integrations/rentman/client.ts (2 sep 2026) --
+// gedeeld met de projectsync (§10.6/§10.8, ProjectRentmanLink.rentmanBusinessUnit)
+// zodat beide altijd dezelfde EVENTO/M&R Kampen/M&R Utrecht-classificatie gebruiken.
 
 /**
  * Categorie: sleutelwoord-classificatie op de naam van het Rentman
@@ -95,7 +86,7 @@ export async function syncRentmanDashboard() {
       planperiodStart: sp.planperiod_start ? new Date(sp.planperiod_start) : null,
       planperiodEnd: sp.planperiod_end ? new Date(sp.planperiod_end) : null,
       city: cityOf(sp),
-      businessUnit: businessUnitOf(sp),
+      businessUnit: businessUnitFor(sp),
       category: categoryOf(sp),
     };
     await prisma.rentmanSubprojectSnapshot.upsert({

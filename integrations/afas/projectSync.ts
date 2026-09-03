@@ -13,17 +13,24 @@ type ProjectForAfas = {
   projectId: string;
   rentmanProjectNumber: string | null;
   rentmanProjectName: string | null;
+  rentmanBusinessUnit: string | null;
 };
 
-/// Administratie-routing, letterlijk overgenomen uit de al met de klant
-/// afgesproken regel (§10.4/§10.2): naam begint met "EVENTO - " -> 21
-/// (Evento), anders -> 02 (Events). Aanname dat dit 1-op-1 AFAS' verplichte
-/// "Projectgroep"-veld (PrGp) is -- dat veld is in de metainfo een vrij
-/// tekstveld (geen vaste waardenlijst), dus AFAS zelf legt niet vast welke
-/// codes geldig zijn. Niet apart bevestigd, verifieer bij de eerste
-/// testboeking.
-function projectGroupFor(rentmanProjectName: string | null): string {
-  return rentmanProjectName?.startsWith("EVENTO - ") ? "21" : "02";
+/// AFAS-Projectgroep per business unit -- bevestigd door de klant (2 sep
+/// 2026, na een eerste testboeking die de eerdere 02/21-aanname afwees:
+/// AFAS gaf "De ingevulde waarde bij 'Projectgroep' bestaat niet.").
+/// `rentmanBusinessUnit` komt uit ProjectRentmanLink (§10.5/§10.8,
+/// `businessUnitFor()` in integrations/rentman/client.ts) en is altijd één
+/// van deze drie waarden. Onbekend/leeg (zou niet moeten voorkomen) valt
+/// terug op "EV".
+const PROJECT_GROUP_BY_BUSINESS_UNIT: Record<string, string> = {
+  EVENTO: "EO",
+  "M&R Kampen": "EV",
+  "M&R Utrecht": "EVU",
+};
+
+function projectGroupFor(rentmanBusinessUnit: string | null): string {
+  return (rentmanBusinessUnit && PROJECT_GROUP_BY_BUSINESS_UNIT[rentmanBusinessUnit]) || "EV";
 }
 
 /**
@@ -42,7 +49,7 @@ function mapProjectToAfas(project: ProjectForAfas, connector: string) {
       Element: {
         Fields: {
           Ds: project.rentmanProjectName,
-          PrGp: projectGroupFor(project.rentmanProjectName),
+          PrGp: projectGroupFor(project.rentmanBusinessUnit),
           PrId: project.rentmanProjectNumber,
         },
       },
@@ -60,7 +67,7 @@ async function updateStatus(
 export async function sendProjectToAfas(projectId: string) {
   const link = await prisma.projectRentmanLink.findUnique({
     where: { projectId },
-    select: { rentmanProjectNumber: true, rentmanProjectName: true },
+    select: { rentmanProjectNumber: true, rentmanProjectName: true, rentmanBusinessUnit: true },
   });
   if (!link) return;
 

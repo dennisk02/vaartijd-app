@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { fetchAllSubprojects, type RentmanSubproject } from "@/integrations/rentman/client";
+import { fetchAllSubprojects, businessUnitFor, type RentmanSubproject } from "@/integrations/rentman/client";
 
 /// Alleen subprojecten met een van deze statussen worden als actief (dus
 /// kiesbaar voor urenregistratie) getoond. Alle andere statussen -- ook nieuwe
@@ -30,6 +30,9 @@ function mapToInternalProject(subproject: RentmanSubproject) {
     rentmanStatus: statusName,
     rentmanStartsAt: subproject.planperiod_start ? new Date(subproject.planperiod_start) : null,
     rentmanEndsAt: subproject.planperiod_end ? new Date(subproject.planperiod_end) : null,
+    // EVENTO/M&R Kampen/M&R Utrecht -- zelfde afleiding als het financiële
+    // dashboard (§10.5), nodig voor de AFAS-Projectgroep-keuze (§10.8).
+    rentmanBusinessUnit: businessUnitFor(subproject),
     // Zodra de status van een subproject verandert (bv. van "Op locatie" naar
     // "Retour verwerkt"), wordt het project bij de volgende sync automatisch
     // weer inactief gezet -- ook als het al eerder actief was.

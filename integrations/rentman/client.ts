@@ -26,6 +26,10 @@ export type RentmanSubproject = {
   planperiod_start?: string | null;
   planperiod_end?: string | null;
   modified?: string | null;
+  // Magazijn/stocklocation-koppeling, bv. "/stocklocations/4" -- enige extra
+  // veld t.o.v. de rest (geen expand nodig, staat direct op het subproject
+  // zelf) nodig om businessUnitFor() hieronder te kunnen afleiden.
+  asset_location_from?: string | null;
 };
 
 type RentmanListResponse<T> = {
@@ -98,7 +102,7 @@ async function rentmanFetchAll<T>(path: string, params: Record<string, string>):
 export async function fetchAllSubprojects({ sinceModified }: { sinceModified?: string } = {}) {
   const params: Record<string, string> = {
     expand: "project,status",
-    fields: "id,name,project,status,planperiod_start,planperiod_end,modified",
+    fields: "id,name,project,status,planperiod_start,planperiod_end,modified,asset_location_from",
   };
   if (sinceModified) {
     // Rentman verwacht dit als losse top-level querysleutel, niet als
@@ -108,6 +112,22 @@ export async function fetchAllSubprojects({ sinceModified }: { sinceModified?: s
     params["modified[gte]"] = sinceModified;
   }
   return rentmanFetchAll<RentmanSubproject>("subprojects", params);
+}
+
+/**
+ * Business unit: projectnaam start met "EVENTO" -> EVENTO; anders bepaald
+ * via het magazijn (`asset_location_from`, bv. "/stocklocations/4"):
+ * /stocklocations/4 -> M&R Utrecht, /stocklocations/1 -> M&R Kampen,
+ * onbekend/leeg (bv. oude projecten van vóór de magazijn-koppeling) valt
+ * terug op M&R Kampen. Rechtstreeks overgenomen uit het referentiedashboard
+ * (v6.1, §10.5) -- hier gedeeld (i.p.v. gedupliceerd in dashboardSync.ts en
+ * sync.ts) zodat de projectsync (§10.6) en het financiële dashboard (§10.5)
+ * altijd dezelfde classificatie gebruiken.
+ */
+export function businessUnitFor(subproject: { name: string; asset_location_from?: string | null }): string {
+  if (subproject.name.trim().toUpperCase().startsWith("EVENTO")) return "EVENTO";
+  if (subproject.asset_location_from === "/stocklocations/4") return "M&R Utrecht";
+  return "M&R Kampen";
 }
 
 export type RentmanFinancialSubproject = {

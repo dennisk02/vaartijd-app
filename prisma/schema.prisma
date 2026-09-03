@@ -296,6 +296,12 @@ model ProjectRentmanLink {
   rentmanStatus        String?
   rentmanStartsAt      DateTime?
   rentmanEndsAt        DateTime?
+  /// EVENTO / M&R Kampen / M&R Utrecht -- zelfde afleiding als het financiële
+  /// dashboard (§10.5, `businessUnitFor()` in integrations/rentman/client.ts),
+  /// hier apart opgeslagen zodat de AFAS-projectaanmaak (§10.8) de juiste
+  /// AFAS-Projectgroep kan kiezen zonder van RentmanSubprojectSnapshot
+  /// (jaargescoped, dashboard-specifiek) afhankelijk te zijn.
+  rentmanBusinessUnit  String?
 
   /// Wanneer `rentmanStatus` voor het laatst daadwerkelijk wijzigde (alleen
   /// bijgewerkt bij een echte statuswijziging, niet bij elke sync) -- gebruikt

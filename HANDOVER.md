@@ -877,18 +877,30 @@ bijwerken"-knop op de pagina zelf.
   niet apart geverifieerd (AFAS legt zelf niet vast welke Projectgroep-codes geldig zijn).
   **Beslist (2 sep 2026):** het Rentman-projectnummer wordt altijd zelf meegestuurd als `PrId`
   (voor traceerbaarheid/koppeling terug naar Rentman) — geen AFAS-autonummering.
-  - **Eerste live testboeking uitgevoerd (2 sep 2026, met expliciet akkoord van de klant, één
-    project uit de testomgeving):** `Ds`/`PrId` werden geaccepteerd, maar AFAS gaf een 500 terug
-    met een heldere `externalMessage`: *"De ingevulde waarde bij 'Projectgroep' bestaat niet."*
-    Dat bevestigt dat `PrGp` het juiste veld is, maar weerlegt de aanname dat de Rentman-
-    administratieroutering ("02"/"21") ook geldige AFAS-Projectgroep-codes zijn — dat zijn ze
-    niet. **Open, blokkerende vraag:** welke Projectgroep-code(s) bestaan er in de AFAS-omgeving
-    van de klant, en welke moet voor welk soort Rentman-project gebruikt worden? Moet aan
-    Willem/de klant gevraagd worden voordat een echte boeking kan slagen.
+  - **Eerste live testboeking (2 sep 2026, met expliciet akkoord van de klant, één project uit de
+    testomgeving):** `Ds`/`PrId` werden geaccepteerd, maar AFAS gaf een 500 terug met een heldere
+    `externalMessage`: *"De ingevulde waarde bij 'Projectgroep' bestaat niet."* Dat bevestigde dat
+    `PrGp` het juiste veld is, maar weerlegde de aanname dat de Rentman-administratieroutering
+    ("02"/"21") ook geldige AFAS-Projectgroep-codes zijn — dat zijn ze niet.
   - Naar aanleiding hiervan is `afasErrorMessage()` toegevoegd (`integrations/afas/client.ts`):
     plakt AFAS' eigen `externalMessage` (indien aanwezig in de foutrespons) achter de generieke
     "HTTP 500"-melding, zodat zulke fouten voortaan direct leesbaar in `afasCreateError` staan
     i.p.v. alleen een statuscode. Gebruikt door zowel `projectSync.ts` als `invoiceSync.ts`.
+  - **Projectgroep-codes bevestigd door de klant** (screenshot van AFAS' eigen
+    "Projectgroepen"-lijst, 9 rijen: ALG/ALGH/EO/EV/EVU/MR/RR/SC/VV) + de gewenste mapping:
+    EVENTO → `EO`, M&R Kampen → `EV`, M&R Utrecht → `EVU`. Om dit te kunnen toepassen kreeg
+    `ProjectRentmanLink` een nieuw veld **`rentmanBusinessUnit`** (migratie
+    `20260902150000_rentman_project_business_unit`), gevuld door `integrations/rentman/sync.ts`
+    met dezelfde `businessUnitFor()`-afleiding als het financiële dashboard (§10.5) — die functie
+    is verplaatst van `dashboardSync.ts` naar `integrations/rentman/client.ts` zodat beide syncs 'm
+    delen i.p.v. dupliceren. Eenmalig teruggevuld voor alle bestaande links (1474 van de 1477
+    rijen; de resterende 3 zijn oude, niet-Bevestigde/geannuleerde projecten en irrelevant voor
+    deze koppeling). `projectGroupFor()` in `projectSync.ts` gebruikt nu deze drie bevestigde
+    codes (met "EV" als vangnet voor een onverwachte/lege waarde).
+  - **Herhaalde testboeking (2 sep 2026, zelfde project): geslaagd.** Met de juiste
+    Projectgroep-code (`EV`, want M&R Kampen) accepteerde AFAS het bericht volledig —
+    `afasCreateStatus` ging naar `SYNCED`. De PtProject-koppeling werkt dus nu end-to-end voor
+    projectaanmaak.
 - **Verkoopfacturen → geen directe factuur-connector, maar `FbDeliveryNote`** (nog niet
   geautoriseerd, gaf op 2 sep 2026 nog een 500). Willems
   voorkeursmethode: een gereed gemelde **pakbon** aanmaken (met de factuur-PDF als bijlage
@@ -917,14 +929,13 @@ feitelijk de Rentman→AFAS-brug is. Gevolg: Niels/Henry/Renko (§17) die alleen
 desgewenst ook de scope "AFAS-koppeling" geven via `/admin/users/[id]`.
 
 **Status per 2 sep 2026:**
-- **Projecten (`PtProject`):** connector geautoriseerd, veldnamen bevestigd via `metainfo`, open
-  vraag (projectnummer vs. autonummering) beslist, en een eerste live testboeking uitgevoerd (met
-  akkoord). **Geblokkeerd op:** een geldige AFAS-Projectgroep-code — de aanname (Rentmans
-  "02"/"21"-administratieroutering) bleek niet te kloppen (AFAS: *"De ingevulde waarde bij
-  'Projectgroep' bestaat niet."*). Vraag aan Willem/de klant welke code(s) er in hun AFAS-omgeving
-  bestaan en hoe die per Rentman-project gekozen moet worden, pas dat aan in `projectGroupFor()`
-  (`integrations/afas/projectSync.ts`), en zet dan pas `AFAS_PROJECT_CONNECTOR=PtProject` echt aan
-  (lokaal/productie) voor algemeen gebruik via de "Verzenden"-knop.
+- **Projecten (`PtProject`): werkend, end-to-end getest.** Connector geautoriseerd, veldnamen
+  (`Ds`/`PrGp`/`PrId`) en Projectgroep-codes (`EO`/`EV`/`EVU`) bevestigd, projectnummer-vraag
+  beslist, en een testboeking succesvol afgerond (`afasCreateStatus: SYNCED`). **Nog te doen
+  voordat dit voor algemeen gebruik aan staat:** `AFAS_PROJECT_CONNECTOR=PtProject` daadwerkelijk
+  instellen (lokaal/productie, nu nog leeg) — dat activeert de "Verzenden"-knop op
+  `/admin/rentman-afas` voor alle beheerders, dus eerst met de klant afstemmen wanneer dat moment
+  is (bv. na een korte periode meekijken op de testboekingen die al gedaan zijn).
 - **Verkoopfacturen (`FbDeliveryNote`):** nog niet geautoriseerd (metainfo gaf op 2 sep 2026 nog
   een 500) — wacht nog op Willem. Zodra dat wel zo is: `mapInvoiceToAfas()`-payload verifiëren/
   aanpassen aan de echte `metainfo` (velden én het bijlage-patroon), dan
