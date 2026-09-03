@@ -12,6 +12,20 @@ export class AfasApiError extends Error {
   }
 }
 
+/**
+ * AFAS geeft bij een 500 op een UpdateConnector vaak een bruikbare
+ * `externalMessage` terug in de responsbody (bv. "De ingevulde waarde bij
+ * 'Projectgroep' bestaat niet.", bevestigd via een live test, 2 sep 2026) --
+ * veel specifieker dan de generieke "AFAS-aanroep mislukt (HTTP 500)."
+ * Gebruik dit i.p.v. `error.message` bij het opslaan van een sync-foutmelding
+ * zodat een admin direct weet wát er mis is.
+ */
+export function afasErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof AfasApiError)) return fallback;
+  const body = error.body as { externalMessage?: string } | undefined;
+  return body?.externalMessage ? `${error.message} ${body.externalMessage}` : error.message;
+}
+
 type AfasConfig = {
   /** Ruwe omgevingscode zoals ingevuld, bv. "T36369AA" (voor logging). */
   environmentCode: string;

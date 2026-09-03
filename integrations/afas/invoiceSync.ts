@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { afasFetch, isAfasConfigured, AfasApiError } from "@/integrations/afas/client";
+import { afasFetch, isAfasConfigured, afasErrorMessage } from "@/integrations/afas/client";
 import { fetchInvoiceFileUrl, fetchInvoiceLines } from "@/integrations/rentman/client";
 
 /// Connector-naam bevestigd door Willem van Melis/Royaal (2 sep 2026, zie
@@ -121,7 +121,7 @@ export async function sendInvoiceToAfas(id: string) {
     await afasFetch(`connectors/${AFAS_DELIVERY_NOTE_CONNECTOR}`, { method: "POST", body: payload });
     await updateStatus(id, { afasCreateStatus: "SYNCED", afasCreateSyncedAt: new Date(), afasCreateError: null });
   } catch (error) {
-    const message = error instanceof AfasApiError ? error.message : "Onbekende fout bij aanmaken pakbon in AFAS.";
+    const message = afasErrorMessage(error, "Onbekende fout bij aanmaken pakbon in AFAS.");
     await updateStatus(id, { afasCreateStatus: "ERROR", afasCreateError: message });
   }
 }

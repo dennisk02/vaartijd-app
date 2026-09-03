@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { afasFetch, isAfasConfigured, AfasApiError } from "@/integrations/afas/client";
+import { afasFetch, isAfasConfigured, afasErrorMessage } from "@/integrations/afas/client";
 
 /// Connector geautoriseerd door Willem van Melis/Royaal (2 sep 2026, zie
 /// HANDOVER §10.8): **"PtProject"** (enkelvoud -- niet "PtProjects", zoals
@@ -78,7 +78,7 @@ export async function sendProjectToAfas(projectId: string) {
     await afasFetch(`connectors/${AFAS_PROJECT_CONNECTOR}`, { method: "POST", body: payload });
     await updateStatus(projectId, { afasCreateStatus: "SYNCED", afasCreateSyncedAt: new Date(), afasCreateError: null });
   } catch (error) {
-    const message = error instanceof AfasApiError ? error.message : "Onbekende fout bij aanmaken project in AFAS.";
+    const message = afasErrorMessage(error, "Onbekende fout bij aanmaken project in AFAS.");
     await updateStatus(projectId, { afasCreateStatus: "ERROR", afasCreateError: message });
   }
 }
