@@ -28,7 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <>
       <NavBar userName={user.name} isAdmin language="NL" dict={getDictionary("NL")} showEmployeeNav={false} />
       <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
-        <nav className="flex gap-4 border-b border-slate-200 text-sm">
+        <nav className="sticky top-14 z-10 flex gap-4 border-b border-slate-200 bg-white pt-1 text-sm">
           {visibleTabs.map((tab) => (
             <Link key={tab.href} href={tab.href} className="pb-2 text-slate-600 hover:text-red-800">
               {tab.label}
