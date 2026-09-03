@@ -865,17 +865,20 @@ bijwerken"-knop op de pagina zelf.
   op en zet 'm om naar base64.
 
 **2 sep 2026 — antwoord van Willem van Melis/Royaal, connectornamen + aanpak bevestigd:**
-- **Projecten → `PtProjects`.** Minimaal benodigde velden (in gewone taal, geen AFAS-veldcodes):
-  Projectomschrijving, Projectgroep, Projectnummer ("kan ook autonummering gebruikt worden").
-  `mapProjectToAfas()` gebruikt voorlopig `Ds`/`PrGr`/`PrId` als beste inschatting — **niet**
-  bevestigd via `metainfo` (die connector bestaat nog niet voor onze omgeving, gaf op 2 sep 2026
-  een 500). `Projectgroep` wordt afgeleid met de al bestaande, door de klant bevestigde
-  administratie-routing (§10.4/§10.2: naam begint met "EVENTO - " → 21, anders → 02) — een
-  aanname dat die twee dingen 1-op-1 hetzelfde zijn, nog niet apart geverifieerd.
-  **Open vraag, nog te beslissen:** zelf het Rentman-projectnummer meesturen (voor
-  traceerbaarheid/koppeling terug) of AFAS' eigen autonummering laten gebruiken? Code stuurt nu
-  het Rentman-nummer mee.
-- **Verkoopfacturen → geen directe factuur-connector, maar `FbDeliveryNote`.** Willems
+- **Projecten → `PtProject`** (enkelvoud — Willems eigen tekst schreef "PtProjects", maar de
+  daadwerkelijk geautoriseerde connectornaam is `PtProject`, bevestigd via `metainfo` die dit
+  keer wél 200 gaf i.p.v. de eerdere 500 — zelfde soort spellingsvalkuil als eerder bij
+  `PtRealization`/`PtRealisation`, §10.1). **Volledige veldenlijst nu bevestigd** (niet meer een
+  aanname): `Ds` (Omschrijving, tekst), `PrGp` (Projectgroep, tekst, **verplicht** — geen vaste
+  waardenlijst in AFAS zelf), `PrId` (Project/projectnummer, tekst, niet verplicht — leeg laten
+  laat AFAS zelf nummeren). `mapProjectToAfas()` gebruikt deze drie. `Projectgroep` wordt afgeleid
+  met de al bestaande, door de klant bevestigde administratie-routing (§10.4/§10.2: naam begint
+  met "EVENTO - " → 21, anders → 02) — een aanname dat die twee dingen 1-op-1 hetzelfde zijn, nog
+  niet apart geverifieerd (AFAS legt zelf niet vast welke Projectgroep-codes geldig zijn).
+  **Beslist (2 sep 2026):** het Rentman-projectnummer wordt altijd zelf meegestuurd als `PrId`
+  (voor traceerbaarheid/koppeling terug naar Rentman) — geen AFAS-autonummering.
+- **Verkoopfacturen → geen directe factuur-connector, maar `FbDeliveryNote`** (nog niet
+  geautoriseerd, gaf op 2 sep 2026 nog een 500). Willems
   voorkeursmethode: een gereed gemelde **pakbon** aanmaken (met de factuur-PDF als bijlage
   toegevoegd), die AFAS zelf omzet naar een verkoopfactuur — vandaar de hernoeming van
   `AFAS_INVOICE_CONNECTOR` naar **`AFAS_DELIVERY_NOTE_CONNECTOR`** (2 sep 2026). `mapInvoiceToAfas()`
@@ -901,11 +904,17 @@ feitelijk de Rentman→AFAS-brug is. Gevolg: Niels/Henry/Renko (§17) die alleen
 `RENTMAN_FINANCIEEL` hebben, zien deze nieuwe pagina niet vanzelf — een beheerder moet ze
 desgewenst ook de scope "AFAS-koppeling" geven via `/admin/users/[id]`.
 
-**Nog te doen (nadat Willem de twee connectors autoriseert):** de twee `mapXToAfas()`-payloads
-verifiëren/aanpassen aan de echte `metainfo` (velden én, voor facturen, het bijlage-patroon), de
-open vraag over projectnummer vs. autonummering beslissen, en dan simpelweg
-`AFAS_PROJECT_CONNECTOR`/`AFAS_DELIVERY_NOTE_CONNECTOR` invullen — verder is er geen
-codewijziging nodig, de UI/wachtrij/sync-statuslogica staat al.
+**Status per 2 sep 2026:**
+- **Projecten (`PtProject`):** connector geautoriseerd, veldnamen bevestigd via `metainfo`, open
+  vraag (projectnummer vs. autonummering) beslist. **Nog niet gedaan:** `AFAS_PROJECT_CONNECTOR`
+  daadwerkelijk instellen (lokaal/productie) en een eerste echte testboeking — dat is een
+  schrijfactie richting AFAS en moet, net als elders in deze integratie (§10.4), eerst expliciet
+  worden voorgelegd voordat hij wordt uitgevoerd, ook al betreft het de T(est)-omgeving.
+- **Verkoopfacturen (`FbDeliveryNote`):** nog niet geautoriseerd (metainfo gaf op 2 sep 2026 nog
+  een 500) — wacht nog op Willem. Zodra dat wel zo is: `mapInvoiceToAfas()`-payload verifiëren/
+  aanpassen aan de echte `metainfo` (velden én het bijlage-patroon), dan
+  `AFAS_DELIVERY_NOTE_CONNECTOR` invullen. Verder is er geen codewijziging nodig, de UI/wachtrij/
+  sync-statuslogica staat al.
 
 ---
 
@@ -924,7 +933,7 @@ Volledige, actuele lijst — zie ook [`.env.example`](.env.example).
 | `AFAS_HOURS_CONNECTOR` | optioneel | Naam van de AFAS UpdateConnector voor uren (`PtRealization`, Amerikaanse spelling — zie §10.1) |
 | `AFAS_HOURS_ITEM_CODE` / `AFAS_HOURS_STATUS_ID` | optioneel | Vaste ItCd/StId-waarden, zie §10.1 — fallback `"300"`/`"1"` |
 | `AFAS_SYNC_SECRET` | optioneel | Secret voor externe trigger van `/api/afas/sync` |
-| `AFAS_PROJECT_CONNECTOR` | optioneel | Naam van de (nog niet geautoriseerde) AFAS UpdateConnector voor projectaanmaak — bevestigd: `PtProjects`, zie §10.8 |
+| `AFAS_PROJECT_CONNECTOR` | optioneel | Naam van de AFAS UpdateConnector voor projectaanmaak — geautoriseerd: `PtProject`, zie §10.8 (nog niet ingesteld, wacht op akkoord voor een eerste testboeking) |
 | `AFAS_DELIVERY_NOTE_CONNECTOR` | optioneel | Naam van de (nog niet geautoriseerde) AFAS UpdateConnector voor gereed gemelde pakbonnen (waaruit AFAS verkoopfacturen maakt) — bevestigd: `FbDeliveryNote`, zie §10.8 |
 | `SHIFTBASE_API_KEY` | optioneel | Shiftbase API-sleutel — **ingevuld in productie, lezen werkt** |
 | `SHIFTBASE_BASE_URL` | optioneel | Override van de standaard Shiftbase-basis-URL |

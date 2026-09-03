@@ -2,10 +2,11 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { afasFetch, isAfasConfigured, AfasApiError } from "@/integrations/afas/client";
 
-/// Connector-naam bevestigd door Willem van Melis/Royaal (2 sep 2026, zie
-/// HANDOVER §10.8): "PtProjects" -- vul die letterlijk in als
-/// AFAS_PROJECT_CONNECTOR zodra hij geautoriseerd is voor de Skrepr App
-/// Connector (metainfo/update/PtProjects gaf op 2 sep 2026 nog een 500).
+/// Connector geautoriseerd door Willem van Melis/Royaal (2 sep 2026, zie
+/// HANDOVER §10.8): **"PtProject"** (enkelvoud -- niet "PtProjects", zoals
+/// eerder abusievelijk aangenomen op basis van Willems eigen tekst; de
+/// juiste naam is bevestigd via metainfo, die dit keer wél 200 gaf). Vul die
+/// letterlijk in als AFAS_PROJECT_CONNECTOR.
 const AFAS_PROJECT_CONNECTOR = process.env.AFAS_PROJECT_CONNECTOR;
 
 type ProjectForAfas = {
@@ -16,37 +17,33 @@ type ProjectForAfas = {
 
 /// Administratie-routing, letterlijk overgenomen uit de al met de klant
 /// afgesproken regel (§10.4/§10.2): naam begint met "EVENTO - " -> 21
-/// (Evento), anders -> 02 (Events). Aanname dat dit 1-op-1 AFAS' gevraagde
-/// "Projectgroep"-veld is (Willem noemde dat als minimaal verplicht veld,
-/// zonder verdere specificatie welke waarden geldig zijn) -- niet apart
-/// bevestigd, verifieer zodra de connector actief is.
+/// (Evento), anders -> 02 (Events). Aanname dat dit 1-op-1 AFAS' verplichte
+/// "Projectgroep"-veld (PrGp) is -- dat veld is in de metainfo een vrij
+/// tekstveld (geen vaste waardenlijst), dus AFAS zelf legt niet vast welke
+/// codes geldig zijn. Niet apart bevestigd, verifieer bij de eerste
+/// testboeking.
 function projectGroupFor(rentmanProjectName: string | null): string {
   return rentmanProjectName?.startsWith("EVENTO - ") ? "21" : "02";
 }
 
 /**
- * Bouwt de payload voor de AFAS PtProjects-UpdateConnector. Willem van Melis/
- * Royaal noemde 3 minimaal benodigde velden (2 sep 2026, geen exacte
- * AFAS-veldcodes): Projectomschrijving, Projectgroep, Projectnummer ("kan
- * ook autonummering gebruikt worden"). Onderstaande veldcodes (Ds/PrGr/PrId)
- * zijn een beste inschatting naar AFAS-conventie -- NIET bevestigd via
- * metainfo (die connector bestaat nog niet voor onze omgeving). Verifieer
- * dit zodra `metainfo/update/PtProjects` beschikbaar is, net zoals bij de
- * uren-connector is gedaan (§10.1).
- *
- * Open vraag voor de klant/Willem: zelf het Rentman-projectnummer
- * meesturen (voor traceerbaarheid/koppeling terug naar Rentman) of AFAS'
- * eigen autonummering laten gebruiken? Nu wordt het Rentman-nummer
- * meegestuurd -- pas aan zodra hierover een keuze is gemaakt.
+ * Bouwt de payload voor de AFAS PtProject-UpdateConnector. Veldcodes
+ * bevestigd via `metainfo/update/PtProject` (2 sep 2026, zie HANDOVER
+ * §10.8): `Ds` (Omschrijving, string 100), `PrGp` (Projectgroep, string 15,
+ * **verplicht**), `PrId` (Project/projectnummer, string 15, niet verplicht
+ * -- AFAS accepteert dit veld leeg en nummert dan zelf). Op uitdrukkelijk
+ * verzoek van de klant (2 sep 2026) wordt het Rentman-projectnummer altijd
+ * zelf meegestuurd (voor traceerbaarheid/koppeling terug naar Rentman) --
+ * geen AFAS-autonummering.
  */
 function mapProjectToAfas(project: ProjectForAfas, connector: string) {
   return {
     [connector]: {
       Element: {
         Fields: {
-          Ds: project.rentmanProjectName, // Projectomschrijving
-          PrGr: projectGroupFor(project.rentmanProjectName), // Projectgroep
-          PrId: project.rentmanProjectNumber, // Projectnummer (of leeg laten voor autonummering)
+          Ds: project.rentmanProjectName,
+          PrGp: projectGroupFor(project.rentmanProjectName),
+          PrId: project.rentmanProjectNumber,
         },
       },
     },
@@ -71,7 +68,7 @@ export async function sendProjectToAfas(projectId: string) {
     await updateStatus(projectId, {
       afasCreateStatus: "PENDING",
       afasCreateError:
-        "AFAS_PROJECT_CONNECTOR is nog niet ingesteld -- PtProjects is bevestigd als benodigde connector (zie HANDOVER §10.8), maar nog niet geautoriseerd voor onze AFAS-omgeving.",
+        "AFAS_PROJECT_CONNECTOR is nog niet ingesteld -- PtProject is geautoriseerd (zie HANDOVER §10.8), maar de env-variabele staat nog niet op productie/lokaal.",
     });
     return;
   }
