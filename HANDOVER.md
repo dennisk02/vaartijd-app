@@ -930,25 +930,28 @@ bijwerken"-knop op de pagina zelf.
    projecten"-overzicht, 3 sep 2026) en toegevoegd aan `mapProjectToAfas()`:
    - `UnFi` (Administratie, **ander veld dan Projectgroep**): EVENTO → 21, M&R Kampen → 2 (bare
      integer, niet "02") -- toevallig de oorspronkelijke 02/21-aanname die eerder abusievelijk op
-     Projectgroep werd toegepast; die hoorde dus bij dit veld. **M&R Utrecht heeft nog geen
-     bevestigde code** (geen voorbeeldrij gezien) -- `administratieFor()` laat het veld dan
-     bewust weg i.p.v. te gokken.
+     Projectgroep werd toegepast; die hoorde dus bij dit veld. **M&R Utrecht bevestigd door de
+     klant (3 sep 2026): ook 2**, zelfde als M&R Kampen.
    - `DaSt` (Begindatum) ← Rentmans `rentmanStartsAt`, `DtGp` (Datum gereed planning) ←
      `rentmanEndsAt`. `DtGw` (Werkelijke datum gereed) bewust leeg gelaten (geen bruikbare bron
      bij aanmaak, alleen relevant als het project echt is afgerond).
    - `Ch`/`Inst`/`DeRe`/`InPr`/`RePr` (Doorbelasten/Termijnfacturen/Pakbonnen naar nacalculatie/
      twee factuurvoorstel-vlaggen) -- op alle geziene voorbeeldprojecten stonden deze uit,
      expliciet op `false` gezet.
-   - **Nog niet gevuld:** `TeId` (Team) -- wisselt per project op de screenshots (bv. een
-     BV-naam, "Kantoor", "Algemeen") zonder voor de hand liggende 1-op-1 Rentman-afleiding; met de
-     klant te bepalen. `EmId`/`CdPl` (Projectleider) -- op de meeste voorbeeldrijen ook leeg,
+   - `TeId` (Team) -- namen doorgegeven door de klant (3 sep 2026): EVENTO → "Evento Event
+     Rentals", M&R Kampen/M&R Utrecht → "Moods & Roots Events B.V.". **Getest: de M&R-waarde werd
+     afgewezen** (*"De ingevulde waarde bij 'Team' bestaat niet."*) -- schrijfwijze klopt dus nog
+     niet exact (vrij tekstveld in AFAS, geen waardenlijst in metainfo om tegenaan te
+     controleren). "Evento Event Rentals" nog niet apart getest. **Blokkerend voor M&R-projecten
+     tot de juiste schrijfwijze bevestigd is** (bv. via een screenshot van AFAS' Teams-lijst, net
+     als bij Projectgroepen).
+   - **Nog niet gevuld:** `EmId`/`CdPl` (Projectleider) -- op de meeste voorbeeldrijen ook leeg,
      dus niet als verplicht beschouwd; zou eventueel uit Rentmans `project.account_manager`
      afgeleid kunnen worden, maar dat is een aparte, nog niet aangevraagde
      Rentman-crew-naar-AFAS-medewerker-koppeling.
    - **Geverifieerd (3 sep 2026):** een nieuw testproject (niet het eerder al aangemaakte, dat gaf
-     terecht "Project bestaat al") met deze volledige, uitgebreide payload werd probleemloos
-     geaccepteerd (`afasCreateStatus: SYNCED`) -- alle bovenstaande velden kloppen dus qua
-     naam/type.
+     terecht "Project bestaat al") met de volledige payload (zonder Team, die kwam pas later)
+     werd probleemloos geaccepteerd (`afasCreateStatus: SYNCED`).
 
 - **Verkoopfacturen → geen directe factuur-connector, maar `FbDeliveryNote`** (nog niet
   geautoriseerd, gaf op 2 sep 2026 nog een 500). Willems
@@ -981,14 +984,17 @@ desgewenst ook de scope "AFAS-koppeling" geven via `/admin/users/[id]`.
 - **Projecten (`PtProject`): kernvelden werkend, end-to-end getest — debiteur + Team nog open.**
   Connector geautoriseerd, veldnamen (`Ds`/`PrGp`/`PrId`/`UnFi`/`DaSt`/`DtGp`/`Ch`/`Inst`/`DeRe`/
   `InPr`/`RePr`) en Projectgroep-codes (`EO`/`EV`/`EVU`) bevestigd, projectnummer-vraag beslist,
-  en meerdere testboekingen succesvol afgerond. **Nog geblokkeerd/open, in volgorde van impact:**
+  en meerdere testboekingen succesvol afgerond. `UnFi` (Administratie) is nu voor alle drie
+  business units bevestigd (EVENTO 21, M&R Kampen/Utrecht 2). **Nog geblokkeerd/open, in volgorde
+  van impact:**
   1. Debiteur (`BcCo`/`DbId`) -- wacht op Willems antwoord over de debiteuren-connectors (zie
      hierboven); zonder dit mist elk aangemaakt project nog een verkooprelatie.
-  2. `TeId` (Team) -- met de klant te bepalen welke waarde welk project krijgt.
-  3. `UnFi` (Administratie) voor M&R Utrecht-projecten -- nog geen bevestigde code.
-  4. `AFAS_PROJECT_CONNECTOR=PtProject` pas echt aanzetten voor algemeen gebruik (nu nog leeg) —
+  2. `TeId` (Team) -- de doorgegeven waarde voor M&R ("Moods & Roots Events B.V.") werd door AFAS
+     afgewezen als niet-bestaand; exacte schrijfwijze nog te bevestigen (evt. via een screenshot
+     van AFAS' Teams-lijst). "Evento Event Rentals" nog niet apart getest.
+  3. `AFAS_PROJECT_CONNECTOR=PtProject` pas echt aanzetten voor algemeen gebruik (nu nog leeg) —
      dat activeert de "Verzenden"-knop op `/admin/rentman-afas` voor alle beheerders, dus eerst
-     met de klant afstemmen wanneer dat moment is (waarschijnlijk pas ná punt 1-3 hierboven).
+     met de klant afstemmen wanneer dat moment is (waarschijnlijk pas ná punt 1-2 hierboven).
 - **Verkoopfacturen (`FbDeliveryNote`):** nog niet geautoriseerd (metainfo gaf op 2 sep 2026 nog
   een 500) — wacht nog op Willem. Zodra dat wel zo is: `mapInvoiceToAfas()`-payload verifiëren/
   aanpassen aan de echte `metainfo` (velden én het bijlage-patroon), dan

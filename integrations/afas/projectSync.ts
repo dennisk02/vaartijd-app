@@ -41,17 +41,36 @@ function projectGroupFor(rentmanBusinessUnit: string | null): string {
 /// hebben Administratie 21, Events(-achtige)/M&R Kampen-projecten
 /// Administratie 2 (let op: bare integer, niet "02"). Dit is toevallig de
 /// oorspronkelijke 02/21-aanname die eerder verkeerd op Projectgroep werd
-/// toegepast -- die hoorde dus bij dit veld. **Nog geen bevestigde code voor
-/// M&R Utrecht** (geen voorbeeldrij gezien) -- daarom hier bewust geen
-/// entry, `administratieFor()` geeft dan `undefined` en het veld wordt
-/// weggelaten (niet verplicht volgens metainfo) i.p.v. een gok te sturen.
+/// toegepast -- die hoorde dus bij dit veld. M&R Utrecht bevestigd door de
+/// klant (3 sep 2026): ook 2, zelfde als M&R Kampen.
 const ADMINISTRATIE_BY_BUSINESS_UNIT: Record<string, number> = {
   EVENTO: 21,
   "M&R Kampen": 2,
+  "M&R Utrecht": 2,
 };
 
 function administratieFor(rentmanBusinessUnit: string | null): number | undefined {
   return rentmanBusinessUnit ? ADMINISTRATIE_BY_BUSINESS_UNIT[rentmanBusinessUnit] : undefined;
+}
+
+/// AFAS-Team (TeId) per business unit -- namen doorgegeven door de klant
+/// (3 sep 2026): Evento-projecten krijgen "Evento Event Rentals",
+/// Events-projecten (zowel M&R Kampen als M&R Utrecht) krijgen "Moods &
+/// Roots Events B.V.". Vrij tekstveld in AFAS (geen waardenlijst in
+/// metainfo), dus de schrijfwijze moet letterlijk overeenkomen met een
+/// bestaand Team. **Getest (3 sep 2026): "Moods & Roots Events B.V." werd
+/// afgewezen** ("De ingevulde waarde bij 'Team' bestaat niet.") -- de
+/// M&R-kant klopt dus nog niet exact (spatie/leesteken/andere schrijfwijze?
+/// niet gegokt, aan de klant gevraagd). "Evento Event Rentals" is nog niet
+/// apart getest.
+const TEAM_BY_BUSINESS_UNIT: Record<string, string> = {
+  EVENTO: "Evento Event Rentals",
+  "M&R Kampen": "Moods & Roots Events B.V.",
+  "M&R Utrecht": "Moods & Roots Events B.V.",
+};
+
+function teamFor(rentmanBusinessUnit: string | null): string | undefined {
+  return rentmanBusinessUnit ? TEAM_BY_BUSINESS_UNIT[rentmanBusinessUnit] : undefined;
 }
 
 /**
@@ -61,8 +80,8 @@ function administratieFor(rentmanBusinessUnit: string | null): number | undefine
  * project in AFAS' "Alle projecten"-overzicht (3 sep 2026):
  * - `Ds` (Omschrijving), `PrGp` (Projectgroep, **verplicht**), `PrId`
  *   (Project/projectnummer) -- al eerder bevestigd/getest.
- * - `UnFi` (Administratie), `DaSt` (Begindatum), `DtGp` (Datum gereed
- *   planning) -- nieuw, zie hierboven/hieronder.
+ * - `UnFi` (Administratie), `TeId` (Team), `DaSt` (Begindatum), `DtGp`
+ *   (Datum gereed planning) -- nieuw, zie hierboven/hieronder.
  * - `Ch`/`Inst`/`DeRe`/`InPr`/`RePr` (Doorbelasten/Termijnfacturen/Pakbonnen
  *   naar nacalculatie/twee factuurvoorstel-vlaggen) -- op alle geziene
  *   voorbeeldprojecten stonden deze uit; expliciet op `false` gezet i.p.v.
@@ -72,10 +91,6 @@ function administratieFor(rentmanBusinessUnit: string | null): number | undefine
  * - `BcCo`/`DbId` (Organisatie/Persoon resp. Verkooprelatie/debiteur) --
  *   wacht op de debiteur-koppeling (§10.8, Rentman-debiteurnummers komen
  *   niet overeen met AFAS; vraag ligt bij Willem).
- * - `TeId` (Team) -- op de screenshots wisselt dit per project (bv.
- *   "Kantoor"/"Algemeen"/een BV-naam) zonder dat er een voor de hand
- *   liggende 1-op-1 afleiding uit Rentman-data is; nog te bepalen met de
- *   klant welke waarde welk soort project moet krijgen.
  * - `EmId`/`CdPl` (Projectleider) -- stond op de meeste voorbeeldrijen ook
  *   leeg, dus niet als verplicht beschouwd; zou eventueel uit Rentmans
  *   `project.account_manager` afgeleid kunnen worden, maar dat vereist weer
@@ -83,6 +98,7 @@ function administratieFor(rentmanBusinessUnit: string | null): number | undefine
  */
 function mapProjectToAfas(project: ProjectForAfas, connector: string) {
   const administratie = administratieFor(project.rentmanBusinessUnit);
+  const team = teamFor(project.rentmanBusinessUnit);
   return {
     [connector]: {
       Element: {
@@ -91,6 +107,7 @@ function mapProjectToAfas(project: ProjectForAfas, connector: string) {
           PrGp: projectGroupFor(project.rentmanBusinessUnit),
           PrId: project.rentmanProjectNumber,
           ...(administratie !== undefined ? { UnFi: administratie } : {}),
+          ...(team !== undefined ? { TeId: team } : {}),
           ...(project.rentmanStartsAt ? { DaSt: project.rentmanStartsAt.toISOString().slice(0, 10) } : {}),
           ...(project.rentmanEndsAt ? { DtGp: project.rentmanEndsAt.toISOString().slice(0, 10) } : {}),
           Ch: false,
