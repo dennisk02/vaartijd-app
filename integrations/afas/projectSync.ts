@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { afasFetch, isAfasConfigured, afasErrorMessage } from "@/integrations/afas/client";
+import { afasFetch, isAfasConfigured, afasErrorMessage, fetchExistingAfasProjectNumbers } from "@/integrations/afas/client";
 
 /// Connector geautoriseerd door Willem van Melis/Royaal (2 sep 2026, zie
 /// HANDOVER §10.8): **"PtProject"** (enkelvoud -- niet "PtProjects", zoals
@@ -53,24 +53,29 @@ function administratieFor(rentmanBusinessUnit: string | null): number | undefine
   return rentmanBusinessUnit ? ADMINISTRATIE_BY_BUSINESS_UNIT[rentmanBusinessUnit] : undefined;
 }
 
-/// AFAS-Team (TeId) per business unit -- namen doorgegeven door de klant
-/// (3 sep 2026): Evento-projecten krijgen "Evento Event Rentals",
-/// Events-projecten (zowel M&R Kampen als M&R Utrecht) krijgen "Moods &
-/// Roots Events B.V.". Vrij tekstveld in AFAS (geen waardenlijst in
-/// metainfo), dus de schrijfwijze moet letterlijk overeenkomen met een
-/// bestaand Team. **Getest (3 sep 2026): "Moods & Roots Events B.V." werd
-/// afgewezen** ("De ingevulde waarde bij 'Team' bestaat niet.") -- de
-/// M&R-kant klopt dus nog niet exact (spatie/leesteken/andere schrijfwijze?
-/// niet gegokt, aan de klant gevraagd). "Evento Event Rentals" is nog niet
-/// apart getest.
-const TEAM_BY_BUSINESS_UNIT: Record<string, string> = {
-  EVENTO: "Evento Event Rentals",
-  "M&R Kampen": "Moods & Roots Events B.V.",
-  "M&R Utrecht": "Moods & Roots Events B.V.",
-};
-
-function teamFor(rentmanBusinessUnit: string | null): string | undefined {
-  return rentmanBusinessUnit ? TEAM_BY_BUSINESS_UNIT[rentmanBusinessUnit] : undefined;
+/// AFAS-Team (TeId) per business unit -- **twee pogingen, allebei afgewezen,
+/// veld daarom tijdelijk uitgeschakeld** (3 sep 2026, zie HANDOVER §10.8):
+/// 1. "Evento Event Rentals"/"Moods & Roots Events B.V." (uit de klant z'n
+///    beschrijving) -> "bestaat niet".
+/// 2. De letterlijke tekst uit de Team-kolom van een screenshot,
+///    "Evento event Rentals B.V. - Projecten" (37 tekens) -> AFAS gaf een
+///    andere, vage fout terug ("Er is een onverwachte fout opgetreden")
+///    i.p.v. de nette "bestaat niet"-melding. Gericht getest: dat bleek de
+///    max. lengte van dit veld te zijn (30 tekens, bevestigd via metainfo) --
+///    zonder de "- Projecten"-toevoeging (25 tekens) kreeg het weer wél de
+///    nette "bestaat niet"-fout. Dus zelfs zonder lengteprobleem is deze
+///    tekst nog steeds geen geldige, bestaande Team-waarde.
+/// **Conclusie:** net als bij Projectgroep (waar de zichtbare beschrijving
+/// "Evento" een aparte, kortere code "EO" bleek te hebben) is de Team-kolom
+/// in het "Alle projecten"-overzicht vermoedelijk ook een label voor een
+/// eigen, kortere Team-code -- niet de letterlijke waarde om te versturen.
+/// Wacht op een screenshot van AFAS' eigen Teams-lijst (Instellingen o.i.d.,
+/// zelfde soort screenshot als de Projectgroepen-lijst) voordat dit veld
+/// weer aan wordt gezet -- tot die tijd laat `teamFor()` het veld bewust weg
+/// (TeId is niet verplicht) i.p.v. elke projectaanmaak te laten mislukken op
+/// een gok.
+function teamFor(_rentmanBusinessUnit: string | null): string | undefined {
+  return undefined;
 }
 
 /**
@@ -128,7 +133,18 @@ async function updateStatus(
   await prisma.projectRentmanLink.update({ where: { projectId }, data });
 }
 
-export async function sendProjectToAfas(projectId: string) {
+/**
+ * @param existingProjectNumbers Vooraf opgehaalde set bestaande AFAS-
+ *   projectnummers (via `fetchExistingAfasProjectNumbers()`, `VPLAN_Project`
+ *   -- zie HANDOVER §10.8) -- optioneel, zodat een batch-aanroep
+ *   (`sendSelectedProjectsToAfas`) 'm één keer ophaalt i.p.v. per project.
+ *   Wordt 'm niet meegegeven (bv. een losse aanroep), dan haalt deze functie
+ *   'm zelf op. Voorkomt de "waarde komt al voor"-fout bij een dubbele
+ *   aanmaakpoging (bv. na een resync met dezelfde selectie) en is de basis
+ *   voor de geplande nachtelijke automatische sync: "bestaat het al?" wordt
+ *   dan gewoon SYNCED zonder opnieuw naar AFAS te schrijven.
+ */
+export async function sendProjectToAfas(projectId: string, existingProjectNumbers?: Set<string>) {
   const link = await prisma.projectRentmanLink.findUnique({
     where: { projectId },
     select: {
@@ -151,6 +167,14 @@ export async function sendProjectToAfas(projectId: string) {
   }
 
   try {
+    if (link.rentmanProjectNumber) {
+      const existing = existingProjectNumbers ?? (await fetchExistingAfasProjectNumbers());
+      if (existing.has(link.rentmanProjectNumber)) {
+        await updateStatus(projectId, { afasCreateStatus: "SYNCED", afasCreateSyncedAt: new Date(), afasCreateError: null });
+        return;
+      }
+    }
+
     const payload = mapProjectToAfas({ projectId, ...link }, AFAS_PROJECT_CONNECTOR);
     await afasFetch(`connectors/${AFAS_PROJECT_CONNECTOR}`, { method: "POST", body: payload });
     await updateStatus(projectId, { afasCreateStatus: "SYNCED", afasCreateSyncedAt: new Date(), afasCreateError: null });
@@ -160,14 +184,18 @@ export async function sendProjectToAfas(projectId: string) {
   }
 }
 
-/** Verzendt alle geselecteerde (afasCreateRequestedAt gezet, nog niet SYNCED) projecten. */
+/** Verzendt alle geselecteerde (afasCreateRequestedAt gezet, nog niet SYNCED) projecten. Haalt
+ * de bestaande AFAS-projectnummers één keer op (i.p.v. per project) en geeft die door. */
 export async function sendSelectedProjectsToAfas() {
   const rows = await prisma.projectRentmanLink.findMany({
     where: { afasCreateRequestedAt: { not: null }, afasCreateStatus: { not: "SYNCED" } },
     select: { projectId: true },
   });
+  if (rows.length === 0) return 0;
+
+  const existingProjectNumbers = await fetchExistingAfasProjectNumbers();
   for (const row of rows) {
-    await sendProjectToAfas(row.projectId);
+    await sendProjectToAfas(row.projectId, existingProjectNumbers);
   }
   return rows.length;
 }

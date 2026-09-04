@@ -202,3 +202,32 @@ export async function testAfasConnection() {
   }
   return afasFetch(`metainfo/update/${connector}`, { method: "GET" });
 }
+
+/**
+ * Alle bestaande AFAS-projectnummers, via de al geautoriseerde
+ * `VPLAN_Project`-GetConnector (ontdekt 3 sep 2026, zie HANDOVER §10.8) --
+ * geeft o.a. `name` (het projectnummer/PrId) + `description` per project.
+ * Gebruikt door `integrations/afas/projectSync.ts` om vóór het aanmaken te
+ * checken of een Rentman-project al als AFAS-project bestaat (voorkomt de
+ * "waarde komt al voor"-fout bij een dubbele aanmaakpoging, en is de basis
+ * voor de geplande nachtelijke automatische sync).
+ */
+export async function fetchExistingAfasProjectNumbers(): Promise<Set<string>> {
+  const numbers = new Set<string>();
+  const take = 100;
+  let skip = 0;
+
+  while (true) {
+    const result = (await afasFetch(`connectors/VPLAN_Project?skip=${skip}&take=${take}`, { method: "GET" })) as {
+      rows?: { name?: string }[];
+    };
+    const rows = result.rows ?? [];
+    for (const row of rows) {
+      if (row.name) numbers.add(row.name);
+    }
+    if (rows.length < take) break;
+    skip += take;
+  }
+
+  return numbers;
+}

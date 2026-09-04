@@ -938,20 +938,44 @@ bijwerken"-knop op de pagina zelf.
    - `Ch`/`Inst`/`DeRe`/`InPr`/`RePr` (Doorbelasten/Termijnfacturen/Pakbonnen naar nacalculatie/
      twee factuurvoorstel-vlaggen) -- op alle geziene voorbeeldprojecten stonden deze uit,
      expliciet op `false` gezet.
-   - `TeId` (Team) -- namen doorgegeven door de klant (3 sep 2026): EVENTO → "Evento Event
-     Rentals", M&R Kampen/M&R Utrecht → "Moods & Roots Events B.V.". **Getest: de M&R-waarde werd
-     afgewezen** (*"De ingevulde waarde bij 'Team' bestaat niet."*) -- schrijfwijze klopt dus nog
-     niet exact (vrij tekstveld in AFAS, geen waardenlijst in metainfo om tegenaan te
-     controleren). "Evento Event Rentals" nog niet apart getest. **Blokkerend voor M&R-projecten
-     tot de juiste schrijfwijze bevestigd is** (bv. via een screenshot van AFAS' Teams-lijst, net
-     als bij Projectgroepen).
+   - `TeId` (Team) -- **twee pogingen, allebei afgewezen, veld tijdelijk uitgeschakeld.** Eerst
+     de namen zoals de klant ze beschreef ("Evento Event Rentals"/"Moods & Roots Events B.V.") →
+     "bestaat niet". Toen de letterlijke tekst uit een screenshot van de Team-kolom, "Evento event
+     Rentals B.V. - Projecten" (37 tekens) → een andere, vage fout ("Er is een onverwachte fout
+     opgetreden") i.p.v. de nette "bestaat niet"-melding. Gericht getest: dat bleek de max. lengte
+     van dit veld (30 tekens, bevestigd via `metainfo`) -- zonder de "- Projecten"-toevoeging (25
+     tekens) kreeg het weer wél de nette "bestaat niet"-fout. **Conclusie:** net als bij
+     Projectgroep (waar de zichtbare beschrijving "Evento" een aparte, kortere code "EO" bleek te
+     hebben) is de Team-kolom in het overzicht vermoedelijk ook een label voor een eigen, kortere
+     Team-code. `teamFor()` in `projectSync.ts` geeft nu bewust altijd `undefined` (veld weggelaten
+     i.p.v. elke aanmaak te laten mislukken op een gok) -- wacht op een screenshot van AFAS' eigen
+     Teams-lijst (net als bij Projectgroepen) voordat dit weer aan gaat.
    - **Nog niet gevuld:** `EmId`/`CdPl` (Projectleider) -- op de meeste voorbeeldrijen ook leeg,
      dus niet als verplicht beschouwd; zou eventueel uit Rentmans `project.account_manager`
      afgeleid kunnen worden, maar dat is een aparte, nog niet aangevraagde
      Rentman-crew-naar-AFAS-medewerker-koppeling.
-   - **Geverifieerd (3 sep 2026):** een nieuw testproject (niet het eerder al aangemaakte, dat gaf
-     terecht "Project bestaat al") met de volledige payload (zonder Team, die kwam pas later)
-     werd probleemloos geaccepteerd (`afasCreateStatus: SYNCED`).
+   - **Geverifieerd (3 sep 2026):** meerdere nieuwe testprojecten (met Team uitgeschakeld) werden
+     probleemloos geaccepteerd (`afasCreateStatus: SYNCED`).
+3. **"Bestaat het al?"-check toegevoegd (3 sep 2026) -- ontdekking, geen nieuwe aanvraag nodig.**
+   De klant wil dit uiteindelijk elke nacht automatisch laten draaien (zie punt 4 hieronder), en
+   vroeg daarbij expliciet om eerst te checken of een project al bestaat. Bleek al mogelijk: de
+   al-geautoriseerde GetConnector **`VPLAN_Project`** (ontdekt bij het uitproberen van de twee
+   bestaande leesconnectors, niet aangevraagd bij Willem) geeft een volledige lijst van bestaande
+   AFAS-projecten terug (`name` = projectnummer, `description` = naam, aanmaak-/wijzigdatum,
+   afgemeld-vlag). Nieuwe functie `fetchExistingAfasProjectNumbers()`
+   (`integrations/afas/client.ts`, paginering via `skip`/`take`) haalt alle projectnummers op;
+   `sendProjectToAfas()`/`sendSelectedProjectsToAfas()` (`projectSync.ts`) checken hiertegen vóór
+   het versturen -- bestaat het al, dan wordt de rij gewoon op `SYNCED` gezet zonder opnieuw naar
+   AFAS te schrijven (voorkomt de "waarde komt al voor"-fout). Getest: een al aangemaakt
+   testproject werd correct herkend en oversloeg de AFAS-aanroep; twee nieuwe testprojecten (die
+   eerder op het Team-veld faalden) werden nu, met Team uitgeschakeld, gewoon aangemaakt.
+4. **Geplande automatisering (nog niet gebouwd, expliciet pas ná een korte testperiode van
+   handmatig doorzetten):** de klant wil dat het aanmaken van projecten in AFAS uiteindelijk elke
+   nacht automatisch gebeurt, net als de andere Rentman-syncs. Zodra gewenst: één regel toevoegen
+   aan `app/api/rentman/sync/route.ts` die `sendSelectedProjectsToAfas()` aanroept (los try/catch,
+   zelfde patroon als de al bestaande drie stappen daar) -- de bestaan-check hierboven maakt dat
+   veilig herhaalbaar. Vereist eerst wel dat `AFAS_PROJECT_CONNECTOR` staat + debiteur/Team-vragen
+   zijn opgelost, anders faalt/mist elke nacht dezelfde velden.
 
 - **Verkoopfacturen → geen directe factuur-connector, maar `FbDeliveryNote`** (nog niet
   geautoriseerd, gaf op 2 sep 2026 nog een 500). Willems
@@ -981,20 +1005,24 @@ feitelijk de Rentman→AFAS-brug is. Gevolg: Niels/Henry/Renko (§17) die alleen
 desgewenst ook de scope "AFAS-koppeling" geven via `/admin/users/[id]`.
 
 **Status per 3 sep 2026:**
-- **Projecten (`PtProject`): kernvelden werkend, end-to-end getest — debiteur + Team nog open.**
-  Connector geautoriseerd, veldnamen (`Ds`/`PrGp`/`PrId`/`UnFi`/`DaSt`/`DtGp`/`Ch`/`Inst`/`DeRe`/
-  `InPr`/`RePr`) en Projectgroep-codes (`EO`/`EV`/`EVU`) bevestigd, projectnummer-vraag beslist,
-  en meerdere testboekingen succesvol afgerond. `UnFi` (Administratie) is nu voor alle drie
-  business units bevestigd (EVENTO 21, M&R Kampen/Utrecht 2). **Nog geblokkeerd/open, in volgorde
+- **Projecten (`PtProject`): kernvelden + bestaan-check werkend, end-to-end getest — debiteur +
+  Team nog open.** Connector geautoriseerd, veldnamen (`Ds`/`PrGp`/`PrId`/`UnFi`/`DaSt`/`DtGp`/
+  `Ch`/`Inst`/`DeRe`/`InPr`/`RePr`) en Projectgroep-/Administratie-codes (`EO`/`EV`/`EVU` resp.
+  21/2) bevestigd voor alle drie business units, projectnummer-vraag beslist,
+  "bestaat-het-al?"-check (`VPLAN_Project`) toegevoegd, en meerdere testboekingen succesvol
+  afgerond (inclusief hertest van eerder gefaalde projecten). **Nog geblokkeerd/open, in volgorde
   van impact:**
   1. Debiteur (`BcCo`/`DbId`) -- wacht op Willems antwoord over de debiteuren-connectors (zie
      hierboven); zonder dit mist elk aangemaakt project nog een verkooprelatie.
-  2. `TeId` (Team) -- de doorgegeven waarde voor M&R ("Moods & Roots Events B.V.") werd door AFAS
-     afgewezen als niet-bestaand; exacte schrijfwijze nog te bevestigen (evt. via een screenshot
-     van AFAS' Teams-lijst). "Evento Event Rentals" nog niet apart getest.
+  2. `TeId` (Team) -- twee pogingen afgewezen, veld tijdelijk uitgeschakeld (zie boven); exacte
+     Team-code nog te bevestigen (evt. via een screenshot van AFAS' Teams-lijst, net als bij
+     Projectgroepen).
   3. `AFAS_PROJECT_CONNECTOR=PtProject` pas echt aanzetten voor algemeen gebruik (nu nog leeg) —
      dat activeert de "Verzenden"-knop op `/admin/rentman-afas` voor alle beheerders, dus eerst
      met de klant afstemmen wanneer dat moment is (waarschijnlijk pas ná punt 1-2 hierboven).
+  4. Daarna, expliciet pas ná een korte testperiode van handmatig doorzetten: automatisch elke
+     nacht laten meelopen op de bestaande Rentman-cron (zie punt 4 hierboven) -- technisch al
+     klaar, wacht op een go van de klant.
 - **Verkoopfacturen (`FbDeliveryNote`):** nog niet geautoriseerd (metainfo gaf op 2 sep 2026 nog
   een 500) — wacht nog op Willem. Zodra dat wel zo is: `mapInvoiceToAfas()`-payload verifiëren/
   aanpassen aan de echte `metainfo` (velden én het bijlage-patroon), dan
