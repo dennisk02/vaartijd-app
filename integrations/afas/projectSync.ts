@@ -53,29 +53,20 @@ function administratieFor(rentmanBusinessUnit: string | null): number | undefine
   return rentmanBusinessUnit ? ADMINISTRATIE_BY_BUSINESS_UNIT[rentmanBusinessUnit] : undefined;
 }
 
-/// AFAS-Team (TeId) per business unit -- **twee pogingen, allebei afgewezen,
-/// veld daarom tijdelijk uitgeschakeld** (3 sep 2026, zie HANDOVER §10.8):
-/// 1. "Evento Event Rentals"/"Moods & Roots Events B.V." (uit de klant z'n
-///    beschrijving) -> "bestaat niet".
-/// 2. De letterlijke tekst uit de Team-kolom van een screenshot,
-///    "Evento event Rentals B.V. - Projecten" (37 tekens) -> AFAS gaf een
-///    andere, vage fout terug ("Er is een onverwachte fout opgetreden")
-///    i.p.v. de nette "bestaat niet"-melding. Gericht getest: dat bleek de
-///    max. lengte van dit veld te zijn (30 tekens, bevestigd via metainfo) --
-///    zonder de "- Projecten"-toevoeging (25 tekens) kreeg het weer wél de
-///    nette "bestaat niet"-fout. Dus zelfs zonder lengteprobleem is deze
-///    tekst nog steeds geen geldige, bestaande Team-waarde.
-/// **Conclusie:** net als bij Projectgroep (waar de zichtbare beschrijving
-/// "Evento" een aparte, kortere code "EO" bleek te hebben) is de Team-kolom
-/// in het "Alle projecten"-overzicht vermoedelijk ook een label voor een
-/// eigen, kortere Team-code -- niet de letterlijke waarde om te versturen.
-/// Wacht op een screenshot van AFAS' eigen Teams-lijst (Instellingen o.i.d.,
-/// zelfde soort screenshot als de Projectgroepen-lijst) voordat dit veld
-/// weer aan wordt gezet -- tot die tijd laat `teamFor()` het veld bewust weg
-/// (TeId is niet verplicht) i.p.v. elke projectaanmaak te laten mislukken op
-/// een gok.
-function teamFor(_rentmanBusinessUnit: string | null): string | undefined {
-  return undefined;
+/// AFAS-Team (TeId) per business unit -- de eerste twee pogingen (volledige
+/// beschrijvingen, zie git-historie) werden afgewezen omdat Team net als
+/// Projectgroep een eigen, kortere code heeft, los van de zichtbare
+/// omschrijving. Bevestigd door de klant via een screenshot van AFAS' eigen
+/// Teams-lijst (3 sep 2026): "Evento event Rentals B.V. - Projecten" -> code
+/// `EVO-PRJ`, "Moods & Roots Events B.V. - Projecten" -> code `MRE-PRJ`.
+const TEAM_BY_BUSINESS_UNIT: Record<string, string> = {
+  EVENTO: "EVO-PRJ",
+  "M&R Kampen": "MRE-PRJ",
+  "M&R Utrecht": "MRE-PRJ",
+};
+
+function teamFor(rentmanBusinessUnit: string | null): string | undefined {
+  return rentmanBusinessUnit ? TEAM_BY_BUSINESS_UNIT[rentmanBusinessUnit] : undefined;
 }
 
 /**
