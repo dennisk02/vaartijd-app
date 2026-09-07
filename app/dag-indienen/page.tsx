@@ -44,7 +44,7 @@ export default async function DagIndienenPage() {
     <>
       <NavBar
         userName={user.name}
-        isAdmin={user.role === "ADMIN"}
+        isAdmin={user.role === "ADMIN" || user.adminScopes.length > 0}
         language={user.language}
         dict={dict}
         canLogOccupancy={user.canLogOccupancy}

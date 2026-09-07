@@ -30,6 +30,12 @@ export function NavBar({
   canLogWaste = true,
 }: {
   userName: string;
+  /// Bepaalt of de "Beheer"-link zichtbaar is -- ondanks de naam dus niet
+  /// strikt `role === "ADMIN"`: een scoped beheerder (`adminScopes.length >
+  /// 0`, bv. iemand met alleen kijktoegang tot Rentman financieel) moet deze
+  /// link ook zien, anders kan diegene helemaal niet bij `/admin/*` komen
+  /// (bevestigde bug, 7 sep 2026 -- zie HANDOVER §10.9). Alle aanroepers
+  /// geven dus `user.role === "ADMIN" || user.adminScopes.length > 0` door.
   isAdmin: boolean;
   language: AppLanguage;
   dict: Dictionary;

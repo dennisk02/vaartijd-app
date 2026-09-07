@@ -13,7 +13,7 @@ export default async function ScheepsbezettingPage() {
 
   const navProps = {
     userName: user.name,
-    isAdmin: user.role === "ADMIN",
+    isAdmin: user.role === "ADMIN" || user.adminScopes.length > 0,
     language: user.language,
     dict,
     canLogOccupancy: user.canLogOccupancy,
