@@ -130,10 +130,17 @@ async function updateStatus(
  *   -- zie HANDOVER §10.8) -- optioneel, zodat een batch-aanroep
  *   (`sendSelectedProjectsToAfas`) 'm één keer ophaalt i.p.v. per project.
  *   Wordt 'm niet meegegeven (bv. een losse aanroep), dan haalt deze functie
- *   'm zelf op. Voorkomt de "waarde komt al voor"-fout bij een dubbele
- *   aanmaakpoging (bv. na een resync met dezelfde selectie) en is de basis
- *   voor de geplande nachtelijke automatische sync: "bestaat het al?" wordt
- *   dan gewoon SYNCED zonder opnieuw naar AFAS te schrijven.
+ *   'm zelf op.
+ *
+ * Bestaat het project al, dan wordt een **PUT** gestuurd (bijwerken) i.p.v.
+ * een POST (aanmaken) -- bevestigd via een live test (4 sep 2026): AFAS'
+ * REST-UpdateConnectors volgen de standaard-conventie POST=Insert/
+ * PUT=Update/DELETE=Delete, wat hier nog niet eerder gebruikt was. Dat
+ * repareert automatisch de handvol testprojecten die vóór volledige
+ * veldherkenning (Team/Administratie/etc.) met een onvolledige payload zijn
+ * aangemaakt, en is de basis voor de geplande nachtelijke automatische sync:
+ * bestaande AFAS-projecten blijven dan gewoon in de pas met de laatste
+ * Rentman-gegevens i.p.v. alleen op "bestaat al, niets doen" te draaien.
  */
 export async function sendProjectToAfas(projectId: string, existingProjectNumbers?: Set<string>) {
   const link = await prisma.projectRentmanLink.findUnique({
@@ -158,19 +165,17 @@ export async function sendProjectToAfas(projectId: string, existingProjectNumber
   }
 
   try {
+    let method: "POST" | "PUT" = "POST";
     if (link.rentmanProjectNumber) {
       const existing = existingProjectNumbers ?? (await fetchExistingAfasProjectNumbers());
-      if (existing.has(link.rentmanProjectNumber)) {
-        await updateStatus(projectId, { afasCreateStatus: "SYNCED", afasCreateSyncedAt: new Date(), afasCreateError: null });
-        return;
-      }
+      if (existing.has(link.rentmanProjectNumber)) method = "PUT";
     }
 
     const payload = mapProjectToAfas({ projectId, ...link }, AFAS_PROJECT_CONNECTOR);
-    await afasFetch(`connectors/${AFAS_PROJECT_CONNECTOR}`, { method: "POST", body: payload });
+    await afasFetch(`connectors/${AFAS_PROJECT_CONNECTOR}`, { method, body: payload });
     await updateStatus(projectId, { afasCreateStatus: "SYNCED", afasCreateSyncedAt: new Date(), afasCreateError: null });
   } catch (error) {
-    const message = afasErrorMessage(error, "Onbekende fout bij aanmaken project in AFAS.");
+    const message = afasErrorMessage(error, "Onbekende fout bij aanmaken/bijwerken project in AFAS.");
     await updateStatus(projectId, { afasCreateStatus: "ERROR", afasCreateError: message });
   }
 }

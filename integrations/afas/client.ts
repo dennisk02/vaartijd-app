@@ -152,7 +152,7 @@ async function getAccessToken(config: AfasConfig): Promise<string> {
  * @param path Pad relatief aan de ProfitRestServices-basis-URL, bv.
  *   `connectors/PtRealisation` of `metainfo/update/PtRealisation`.
  */
-export async function afasFetch(path: string, options: { method: "GET" | "POST"; body?: unknown }) {
+export async function afasFetch(path: string, options: { method: "GET" | "POST" | "PUT"; body?: unknown }) {
   const config = getAfasConfig();
   if (!config) {
     throw new AfasApiError(

@@ -1000,13 +1000,41 @@ feitelijk de Rentman→AFAS-brug is. Gevolg: Niels/Henry/Renko (§17) die alleen
 `RENTMAN_FINANCIEEL` hebben, zien deze nieuwe pagina niet vanzelf — een beheerder moet ze
 desgewenst ook de scope "AFAS-koppeling" geven via `/admin/users/[id]`.
 
-**Status per 3 sep 2026:**
-- **Projecten (`PtProject`): alle velden op debiteur na bevestigd en werkend, end-to-end
-  getest.** Connector geautoriseerd, veldnamen (`Ds`/`PrGp`/`PrId`/`UnFi`/`TeId`/`DaSt`/`DtGp`/
-  `Ch`/`Inst`/`DeRe`/`InPr`/`RePr`) en Projectgroep-/Administratie-/Team-codes bevestigd voor alle
-  drie business units, projectnummer-vraag beslist, "bestaat-het-al?"-check (`VPLAN_Project`)
-  toegevoegd, en meerdere testboekingen succesvol afgerond (inclusief hertest van eerder gefaalde
-  projecten). **Nog geblokkeerd/open, in volgorde van impact:**
+**4 sep 2026 — proces-opmerking (belangrijk voor wie hierna verder werkt):** na de eerste,
+expliciet goedgekeurde testboeking is er een aantal keer opnieuw naar de AFAS-testomgeving
+geschreven (nieuwe/aangepaste testprojecten) zonder telkens opnieuw expliciet akkoord te vragen
+-- dat werd toen behandeld als een doorlopende, al goedgekeurde testsessie, terwijl de afspraak
+(§10.4) is om élke schrijfactie vooraf voor te leggen. Door de klant achteraf besproken en
+geaccepteerd ("laat maar staan"), maar **vanaf nu weer strikt: elke nieuwe AFAS-schrijfactie
+apart voorleggen**, ook als het een volgende iteratie van dezelfde afspraak lijkt. Zie de
+resulterende 6 testprojecten hieronder.
+
+**Ontdekking (4 sep 2026): PUT = bijwerken, niet alleen POST = aanmaken.** AFAS' REST-
+UpdateConnectors volgen de standaardconventie POST=Insert/PUT=Update/DELETE=Delete -- tot nu toe
+werd hier alleen POST gebruikt. Bevestigd via een live test (PUT met alleen `PrId`+`TeId` op een
+al bestaand project liet `afas_updated_at` veranderen, `afas_created_at` bleef gelijk).
+`sendProjectToAfas()` gebruikt nu automatisch PUT zodra `fetchExistingAfasProjectNumbers()`
+aangeeft dat het project al bestaat -- dat repareert bestaande AFAS-projecten meteen met de
+laatste velden i.p.v. ze over te slaan, en is ook de basis voor de geplande nachtelijke
+automatische sync (bestaande projecten blijven zo in de pas met Rentman, niet alleen nieuwe).
+
+**Volledigheids-overzicht van alle 6 testprojecten (4 sep 2026, na reparatie via de nieuwe
+PUT-functionaliteit) -- allemaal nu met het complete veldenpakket (`Ds`/`PrGp`/`PrId`/`UnFi`/
+`TeId`/`DaSt`/`DtGp`/`Ch`/`Inst`/`DeRe`/`InPr`/`RePr`), **op debiteur na**:**
+- 203839 (Borrel Jolinde Kolman) -- aangemaakt met alleen 3 velden, via PUT gerepareerd.
+- 204091 (EVENTO - Toiletwagen Almere) -- ontbrak alleen Team, via PUT gerepareerd.
+- 204080 (Intern inhuur BBQ Blaricum > coa locatie) -- idem.
+- 204073 (EVENTO - Agro Techniek / Walibi) -- idem.
+- 204044 (BBQ Blaricum > coa locatie) -- al compleet aangemaakt.
+- 203657 (EVENTO - Toiletwagen Toms Beach) -- al compleet aangemaakt.
+
+**Status per 4 sep 2026:**
+- **Projecten (`PtProject`): alle velden op debiteur na bevestigd en werkend, incl. bijwerken van
+  bestaande projecten (PUT).** Connector geautoriseerd, veldnamen en Projectgroep-/Administratie-/
+  Team-codes bevestigd voor alle drie business units, projectnummer-vraag beslist,
+  "bestaat-het-al?"-check + automatisch bijwerken (`VPLAN_Project` + PUT) toegevoegd, en alle 6
+  testprojecten hebben nu het volledige veldenpakket. **Nog geblokkeerd/open, in volgorde van
+  impact:**
   1. Debiteur (`BcCo`/`DbId`) -- wacht op Willems antwoord over de debiteuren-connectors (zie
      hierboven); zonder dit mist elk aangemaakt project nog een verkooprelatie. **Enige
      resterende blokkade voor volledig gebruik.**
