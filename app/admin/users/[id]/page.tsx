@@ -17,6 +17,7 @@ const ADMIN_SCOPE_OPTIONS: { value: AdminScope; label: string }[] = [
   { value: "SHIFTBASE", label: "Shiftbase" },
   { value: "AFAS", label: "AFAS-koppeling" },
   { value: "RAPPORTAGES", label: "Rapportages" },
+  { value: "TRACTION", label: "Traction (taakmodule)" },
 ];
 
 export default async function UserAssignmentsPage({ params }: { params: Promise<{ id: string }> }) {

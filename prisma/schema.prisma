@@ -35,9 +35,10 @@ enum ProjectGroup {
   RIVER_ROOTS
 }
 
-/// De 8 beheerbare onderdelen van /admin/*. Een medewerker die geen
-/// volledige beheerder (Role.ADMIN) is kan hier los in toegewezen krijgen --
-/// zie User.adminScopes en lib/dal.ts (requireAdminScope).
+/// De beheerbare onderdelen van /admin/* (en, voor TRACTION, /traction/*).
+/// Een medewerker die geen volledige beheerder (Role.ADMIN) is kan hier los
+/// in toegewezen krijgen -- zie User.adminScopes en lib/dal.ts
+/// (requireAdminScope).
 enum AdminScope {
   PROJECTS
   SHIPS
@@ -47,6 +48,11 @@ enum AdminScope {
   SHIFTBASE
   AFAS
   RAPPORTAGES
+  /// Taak/toewijzingsmodule (§10.9, `/traction/*`) -- op verzoek van de
+  /// klant bewust een eigen scope i.p.v. onderdeel van RAPPORTAGES/USERS,
+  /// zodat "directie" hier los van andere admin-onderdelen aan/uit te
+  /// zetten is.
+  TRACTION
 }
 
 enum SyncStatus {
@@ -121,6 +127,9 @@ model User {
   /// beheer van de koppeling geen toegang tot medewerkersgegevens vereist.
   afasLink       UserAfasLink?
   shiftbaseLink  UserShiftbaseLink?
+
+  /// Taak/toewijzingsmodule (§10.9) -- wie een voortgangsnotitie plaatste.
+  rockUpdates    RockUpdate[]
 }
 
 model Project {
@@ -523,5 +532,73 @@ model RentmanInvoiceExport {
   updatedAt             DateTime   @updatedAt
 
   @@index([invoiceDate])
+}
+
+// ---------------------------------------------------------------------------
+// §10.9 Taak/toewijzingsmodule ("Traction", 7 sep 2026) -- functioneel gelijk
+// aan de VBB Traction Organizer (rocks/taken met eigenaar, status,
+// overdracht), maar met eigen, vaartijden-specifieke data (geen VBB-
+// omzetcijfers/overnameplannen). Losstaand van de rest van de app: eigen
+// route `/traction/*`, gated op AdminScope.TRACTION i.p.v. een apart
+// rollensysteem (zie HANDOVER §10.9 voor de volledige afweging).
+// ---------------------------------------------------------------------------
+
+/// Collega binnen de taakmodule -- geen koppeling met User: dit is een losse,
+/// lichte naamlijst (niet elke collega hoeft een Vaartijd-account te hebben),
+/// puur om taken aan toe te wijzen. "Verwijderen" is een soft-delete
+/// (`active=false`, zelfde patroon als Project/Ship/User) i.p.v. een
+/// database-delete, en vereist eerst herverdeling van eventuele openstaande
+/// taken (zie deactivateColleague() in lib/actions/traction.ts).
+model Colleague {
+  id        String   @id @default(cuid())
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  rocks     Rock[]
+}
+
+/// Configureerbare statusopties (bv. "Nog te doen"/"Bezig"/"Klaar") --
+/// bewust geen vaste enum, want het document vroeg expliciet om
+/// configureerbare statussen. `Rock.status` verwijst hier op naam naar (geen
+/// foreign key, zodat een hernoemde/verwijderde status bestaande taken niet
+/// laat breken -- zie de integriteitscheck in deleteStatusOption()).
+model RockStatusOption {
+  id    String @id @default(cuid())
+  label String @unique
+  /// Bepaalt de volgorde in keuzelijsten/het dashboard (laag = eerst).
+  order Int    @default(0)
+}
+
+/// Eén taak ("rock"), per maand/jaar. `ownerId` mag leeg zijn (nog niet
+/// toegewezen).
+model Rock {
+  id        String       @id @default(cuid())
+  year      Int
+  month     Int
+  task      String
+  ownerId   String?
+  owner     Colleague?   @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  status    String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  updates   RockUpdate[]
+
+  @@index([year, month])
+  @@index([ownerId])
+}
+
+/// Voortgangsnotitie/logregel bij een taak -- ook gebruikt om overdrachten
+/// (`handoffRock()`) automatisch te documenteren ("Overgedragen van X naar
+/// Y"), zodat de geschiedenis van een taak in één lijst te volgen is.
+model RockUpdate {
+  id        String   @id @default(cuid())
+  rockId    String
+  rock      Rock     @relation(fields: [rockId], references: [id], onDelete: Cascade)
+  note      String
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@index([rockId])
 }
 

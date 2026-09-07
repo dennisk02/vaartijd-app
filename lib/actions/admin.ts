@@ -16,6 +16,7 @@ const ADMIN_SCOPES: AdminScope[] = [
   "SHIFTBASE",
   "AFAS",
   "RAPPORTAGES",
+  "TRACTION",
 ];
 
 export type AdminFormState =

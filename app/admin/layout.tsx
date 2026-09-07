@@ -16,13 +16,19 @@ const tabs: { href: string; label: string; scope: AdminScope }[] = [
   { href: "/admin/shiftbase", label: "Shiftbase", scope: "SHIFTBASE" },
 ];
 
+/// Traction (§10.9) leeft bewust buiten /admin (eigen URL-structuur,
+/// /traction/*) -- hier alleen een link ernaartoe voor wie de scope heeft,
+/// puur voor vindbaarheid vanuit het admin-menu.
+const TRACTION_LINK = { href: "/traction", label: "Traction →", scope: "TRACTION" as AdminScope };
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireAnyAdminScope();
   // Volledige beheerders zien alle tabs; scoped beheerders/medewerkers alleen
   // de onderdelen die ze toegewezen hebben gekregen (zie lib/dal.ts). Directe
   // navigatie naar een niet-toegewezen sectie wordt alsnog door de
   // pagina-eigen requireAdminScope()-guard geblokkeerd.
-  const visibleTabs = user.role === "ADMIN" ? tabs : tabs.filter((tab) => user.adminScopes.includes(tab.scope));
+  const allTabs = [...tabs, TRACTION_LINK];
+  const visibleTabs = user.role === "ADMIN" ? allTabs : allTabs.filter((tab) => user.adminScopes.includes(tab.scope));
 
   return (
     <>

@@ -1050,6 +1050,60 @@ PUT-functionaliteit) -- allemaal nu met het complete veldenpakket (`Ds`/`PrGp`/`
   `AFAS_DELIVERY_NOTE_CONNECTOR` invullen. Verder is er geen codewijziging nodig, de UI/wachtrij/
   sync-statuslogica staat al.
 
+### 10.9 Taak/toewijzingsmodule "Traction" (`/traction/*`) — **werkend**
+
+Functioneel gelijk aan de VBB Traction Organizer (rocks/taken met eigenaar, status, overdracht),
+maar met eigen, vaartijden-specifieke data — geen VBB-omzetcijfers/overnameplannen. Aangeleverd
+als een kant-en-klare bouwinstructie (`instructie_taakmodule_vaartijden.md`, 7 sep 2026) die
+zelf om een "Stap 0"-verificatie vroeg voordat er gebouwd werd; die verificatie bracht een aantal
+correcties op de aannames in dat document aan het licht (zie hieronder), waarna de rest van het
+document wel is gevolgd.
+
+**Correcties op de oorspronkelijke instructie (bevestigd tegen de echte codebase, niet
+aangenomen):**
+- **Geen NextAuth/Auth.js nodig** — er bestaat al een eigen JWT-sessiesysteem (`lib/session.ts`,
+  `jose`) met verplichte TOTP-2FA. Een tweede, parallel auth-systeem zou dubbel werk zijn.
+- **Geen apart `crew`/`directie`-rollensysteem** — het bestaande `AdminScope[]`-mechanisme
+  (§6/§10.6) is precies gemaakt voor "geef deze medewerker toegang tot dit ene onderdeel zonder
+  volledig beheerder te zijn". Nieuwe waarde `TRACTION` toegevoegd i.p.v. een tweede
+  rechtensysteem ernaast.
+- **Geen `middleware.ts`** — Next.js 16 heeft dit hernoemd naar **`proxy.ts`** (bevestigd, bestaat
+  al en regelt login-/2FA-afdwinging voor de hele app). Rol-/scope-checks gebeuren in deze app
+  bewust niet in die laag, maar per pagina (`requireAdminScope()`) — zelfde patroon aangehouden
+  voor `/traction/*`.
+- **Geen losse `/api/rocks`/`/api/org`-REST-laag** — alle andere admin-functionaliteit gebruikt
+  Next.js Server Actions (`lib/actions/*.ts`), dus `lib/actions/traction.ts` volgt dat patroon.
+  (De optionele AI-chatfunctie uit het document is, zoals het document zelf ook als optie gaf,
+  niet gebouwd in deze eerste versie.)
+
+**Datamodel** (migratie `20260907090000_traction_taakmodule`): `Colleague` (losse naamlijst, geen
+koppeling met `User` — niet elke collega heeft een Vaartijd-account), `RockStatusOption`
+(configureerbare statussen, bewust geen vaste enum — `Rock.status` verwijst op naam, geen foreign
+key, zodat een verwijderde status bestaande taken niet laat breken), `Rock` (taak, met
+`year`/`month`, optionele `ownerId`), `RockUpdate` (voortgangsnotities, ook gebruikt om
+overdrachten automatisch te loggen).
+
+**Belangrijkste gedragsregels:**
+- "Verwijderen" van een collega is een soft-delete (`active=false`, zelfde patroon als
+  Project/Ship/User) — geen echte database-delete.
+- Heeft die collega nog taken, dan **blokkeert** `deactivateColleague()` en vraagt om eerst een
+  andere collega te kiezen om alles aan over te dragen (`components/traction/colleague-list.tsx`
+  toont dan een inline keuzelijst) — voorkomt dat taken "verdwijnen".
+- `handoffRock()` legt een overdracht automatisch vast als `RockUpdate`-notitie ("Overgedragen
+  van X naar Y"), zodat de geschiedenis van een taak in één lijst te volgen is.
+- `deleteStatusOption()` blokkeert zolang er nog taken met die status zijn.
+
+**Toegang:** `AdminScope.TRACTION`, eigen route `/traction/*` (buiten `/admin`, zoals in het
+document gevraagd) met een eigen layout (`app/traction/layout.tsx`) — Next.js-layouts werken op
+bestandslocatie, niet op URL-prefix, dus dit kon niet dezelfde layout-file als `/admin` hergebruiken;
+wel bewust dezelfde chrome-stijl (sticky sectienav, zie §10.8's sticky-nav-fix). Een link naar
+`/traction` staat ook in het `/admin`-menu voor wie de scope heeft, puur voor vindbaarheid.
+
+**Geverifieerd (7 sep 2026)** met een tijdelijk account: statussen aanmaken/herordenen, collega's
+toevoegen, een taak aanmaken en toewijzen, een notitie toevoegen, status wijzigen, overdragen naar
+een andere collega (met automatische logregel), en deactiveren-met-verplichte-herverdeling —
+allemaal werkend bevonden. Testdata en account nadien verwijderd.
+
 ---
 
 ## 11. Environment variables
