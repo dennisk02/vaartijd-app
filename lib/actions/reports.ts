@@ -106,45 +106,7 @@ export async function getMealsServedReport(period: ReportPeriod) {
   return { data, totalServed, weightedAverage, unit: "maaltijden" as const };
 }
 
-/**
- * Operationele voedselverspilling (passagiers + keuken) in kg per dag, over
- * de gekozen periode -- bereidingsafval telt hier bewust niet mee (net als
- * Victor Mshati's brondashboard, sep 2026: "Operational Waste"). "Gewogen
- * gemiddelde" hier = gram afval per geserveerde maaltijd (totaal kg afval x
- * 1000 / totaal aantal maaltijden in dezelfde periode) -- een eerlijkere
- * maat dan een gemiddelde van dagtotalen, omdat een dag met weinig
- * geserveerde maaltijden anders even zwaar meetelt als een drukke dag.
- */
-export async function getFoodWasteReport(period: ReportPeriod) {
-  await requireAdminScope("RAPPORTAGES");
-  const { start, end } = getPeriodRange(period);
-
-  const [wasteRecords, mealRecords] = await Promise.all([
-    prisma.foodWaste.findMany({
-      where: { date: { gte: start, lt: end } },
-      select: { date: true, passengerWasteKg: true, kitchenWasteKg: true },
-    }),
-    prisma.mealCount.aggregate({
-      where: { date: { gte: start, lt: end } },
-      _sum: { countServed: true },
-    }),
-  ]);
-
-  const byDate = new Map<string, number>();
-  let totalKg = 0;
-  for (const record of wasteRecords) {
-    const key = record.date.toISOString().slice(0, 10);
-    const kg = Number(record.passengerWasteKg) + Number(record.kitchenWasteKg);
-    byDate.set(key, (byDate.get(key) ?? 0) + kg);
-    totalKg += kg;
-  }
-
-  const data = Array.from(byDate.entries())
-    .map(([date, kg]) => ({ date, kg: Math.round(kg * 100) / 100 }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const totalMealsServed = mealRecords._sum.countServed ?? 0;
-  const wastePerMealGrams = totalMealsServed > 0 ? (totalKg * 1000) / totalMealsServed : 0;
-
-  return { data, totalKg, weightedAverage: wastePerMealGrams, unit: "gram afval / maaltijd" as const };
-}
+// Voedselverspilling heeft sinds de uitbreiding naar 4 velden per maaltijd
+// (sep 2026) een eigen, uitgebreider dashboard op /admin/voedselverspilling
+// (lib/actions/food-waste-reports.ts) -- de simpele dagelijkse grafiek die
+// hier stond is daarin opgegaan, geen losse rapportage meer op deze pagina.

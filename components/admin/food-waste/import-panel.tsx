@@ -47,6 +47,12 @@ export function ImportPanel() {
             {state.summary.totalRows} rijen gelezen -- {state.summary.created} nieuw, {state.summary.updated}{" "}
             bijgewerkt, {state.summary.flagged} gevlagd.
           </p>
+          {state.summary.duplicatesWithinFile > 0 && (
+            <p className="mt-1 text-amber-700">
+              {state.summary.duplicatesWithinFile} rij(en) kwamen dubbel voor in het bestand zelf (zelfde
+              schip/datum/maaltijd) -- de laatste in het bestand is aangehouden.
+            </p>
+          )}
           {state.summary.skippedExistingCrewRows > 0 && (
             <p className="mt-1 text-slate-500">
               {state.summary.skippedExistingCrewRows} rij(en) overgeslagen: al handmatig ingevoerd door de bemanning.

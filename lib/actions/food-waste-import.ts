@@ -9,6 +9,10 @@ export type ImportSummary = {
   totalRows: number;
   created: number;
   updated: number;
+  /** Rijen die niet uit een eerdere import kwamen, maar binnen dit
+   * bestand zelf al een tweede keer voor hetzelfde schip/datum/maaltijd
+   * voorkwamen -- de laatste in het bestand "wint". Zit ook in `updated`. */
+  duplicatesWithinFile: number;
   flagged: number;
   skippedUnmappedLocations: { location: string; count: number }[];
   skippedUnknownMeal: number;
@@ -55,6 +59,7 @@ export async function importFoodWasteWorkbook(
     select: { id: true, shipId: true, date: true, mealType: true },
   });
   const existingByKey = new Map(existingRows.map((r) => [rowKey(r.shipId, r.date, r.mealType), r.id]));
+  const keysFromPreviousImports = new Set(existingByKey.keys());
   const crewRows = await prisma.foodWaste.findMany({
     where: { source: "CREW" },
     select: { shipId: true, date: true, mealType: true },
@@ -65,6 +70,7 @@ export async function importFoodWasteWorkbook(
     totalRows: parsed.rows.length,
     created: 0,
     updated: 0,
+    duplicatesWithinFile: 0,
     flagged: 0,
     skippedUnmappedLocations: [],
     skippedUnknownMeal: 0,
@@ -112,12 +118,18 @@ export async function importFoodWasteWorkbook(
       createdById: user.id,
     };
 
+    // Het brondocument bevat zelf soms meer dan één rij voor hetzelfde
+    // schip/datum/maaltijd -- existingByKey bijwerken zodra een rij binnen
+    // dezelfde import is aangemaakt, anders knalt de 2e op de unique
+    // constraint i.p.v. de 1e rij te overschrijven.
     const existingId = existingByKey.get(key);
     if (existingId) {
       await prisma.foodWaste.update({ where: { id: existingId }, data });
       summary.updated++;
+      if (!keysFromPreviousImports.has(key)) summary.duplicatesWithinFile++;
     } else {
-      await prisma.foodWaste.create({ data });
+      const createdRow = await prisma.foodWaste.create({ data });
+      existingByKey.set(key, createdRow.id);
       summary.created++;
     }
   }

@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { requireAdminScope } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { Card } from "@/components/ui";
 import { HoursReportChart } from "@/components/admin/reports/hours-report-chart";
 import { OccupancyReportChart } from "@/components/admin/reports/occupancy-report-chart";
 import { MealsServedChart } from "@/components/admin/reports/meals-served-chart";
-import { FoodWasteChart } from "@/components/admin/reports/food-waste-chart";
 
 export default async function AdminRapportagesPage() {
   await requireAdminScope("RAPPORTAGES");
@@ -27,7 +28,21 @@ export default async function AdminRapportagesPage() {
       <HoursReportChart ships={ships} />
       <OccupancyReportChart />
       <MealsServedChart />
-      <FoodWasteChart />
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-medium text-slate-800">Voedselverspilling</h2>
+            <p className="text-sm text-slate-500">
+              Verhuisd naar een eigen, uitgebreider dashboard: locatie-overzicht met Action/Watch-status,
+              maandtrend en data-kwaliteit.
+            </p>
+          </div>
+          <Link href="/admin/voedselverspilling" className="whitespace-nowrap text-sm font-medium text-red-700 hover:underline">
+            Naar Voedselverspilling →
+          </Link>
+        </div>
+      </Card>
     </div>
   );
 }
