@@ -11,7 +11,7 @@ function summarize(
   timeEntries: { hours: unknown }[],
   occupancy: { passengerCount: number; crewCount: number }[],
   meals: { countServed: number }[],
-  waste: { kg: unknown }[],
+  waste: { passengerWasteKg: unknown; kitchenWasteKg: unknown }[],
   submittedAt: Date | null
 ) {
   return {
@@ -19,7 +19,10 @@ function summarize(
     hours: timeEntries.reduce((sum, e) => sum + Number(e.hours), 0),
     occupancy: occupancy.reduce((sum, o) => sum + o.passengerCount + o.crewCount, 0),
     meals: meals.reduce((sum, m) => sum + m.countServed, 0),
-    waste: waste.reduce((sum, w) => sum + Number(w.kg), 0),
+    // "Verspilling" op het dashboard = operationele verspilling (passagiers +
+    // keuken); bereidingsafval telt hier bewust niet mee, net als in de
+    // rapportages (lib/actions/reports.ts, getFoodWasteReport).
+    waste: waste.reduce((sum, w) => sum + Number(w.passengerWasteKg) + Number(w.kitchenWasteKg), 0),
     hasHours: timeEntries.length > 0,
     hasOccupancy: occupancy.length > 0,
     hasMeals: meals.length > 0,

@@ -7,14 +7,22 @@ import { Button, Field, Input, Select } from "@/components/ui";
 
 type Option = { id: string; name: string };
 
-const MEAL_ROWS: { key: "Breakfast" | "Lunch" | "Dinner"; icon: string; labelKey: "breakfast" | "lunch" | "dinner" }[] = [
+type MealKey = "Breakfast" | "Lunch" | "Dinner";
+
+const MEAL_ROWS: { key: MealKey; icon: string; labelKey: "breakfast" | "lunch" | "dinner" }[] = [
   { key: "Breakfast", icon: "🥐", labelKey: "breakfast" },
   { key: "Lunch", icon: "🍲", labelKey: "lunch" },
   { key: "Dinner", icon: "🍽️", labelKey: "dinner" },
 ];
 
-function round1(value: number) {
-  return Math.max(0, Math.round(value * 10) / 10);
+type MealValues = { foodUsed: string; passengerWaste: string; kitchenWaste: string; prepWaste: string };
+
+const EMPTY_MEAL: MealValues = { foodUsed: "", passengerWaste: "", kitchenWaste: "", prepWaste: "" };
+const EMPTY_ALL: Record<MealKey, MealValues> = { Breakfast: { ...EMPTY_MEAL }, Lunch: { ...EMPTY_MEAL }, Dinner: { ...EMPTY_MEAL } };
+
+function num(value: string) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export function FoodWasteForm({ ships, dict }: { ships: Option[]; dict: Dictionary }) {
@@ -23,15 +31,15 @@ export function FoodWasteForm({ ships, dict }: { ships: Option[]; dict: Dictiona
   const formRef = useRef<HTMLFormElement>(null);
   const defaultShipId = ships.length === 1 ? ships[0].id : "";
 
-  const [kg, setKg] = useState({ Breakfast: 0, Lunch: 0, Dinner: 0 });
+  const [meals, setMeals] = useState<Record<MealKey, MealValues>>(EMPTY_ALL);
+  const [prepOpen, setPrepOpen] = useState<Record<MealKey, boolean>>({ Breakfast: false, Lunch: false, Dinner: false });
 
-  // Steppers terugzetten na een geslaagde submit via het render-tijd
-  // state-aanpassingspatroon (i.p.v. setState binnen een effect).
   const [lastHandledState, setLastHandledState] = useState(state);
   if (state !== lastHandledState) {
     setLastHandledState(state);
     if (state?.message && !state.errors) {
-      setKg({ Breakfast: 0, Lunch: 0, Dinner: 0 });
+      setMeals(EMPTY_ALL);
+      setPrepOpen({ Breakfast: false, Lunch: false, Dinner: false });
     }
   }
 
@@ -41,7 +49,19 @@ export function FoodWasteForm({ ships, dict }: { ships: Option[]; dict: Dictiona
     }
   }, [state]);
 
-  const total = round1(kg.Breakfast + kg.Lunch + kg.Dinner);
+  function setField(meal: MealKey, field: keyof MealValues, value: string) {
+    setMeals((m) => ({ ...m, [meal]: { ...m[meal], [field]: value } }));
+  }
+
+  const totalOperationalWaste = (Object.keys(meals) as MealKey[]).reduce(
+    (sum, key) => sum + num(meals[key].passengerWaste) + num(meals[key].kitchenWaste),
+    0
+  );
+
+  const fieldErrorFor = (meal: MealKey, field: "foodUsed" | "passengerWaste" | "kitchenWaste" | "prepWaste") => {
+    const name = `${field}${meal}` as const;
+    return state?.errors?.[name];
+  };
 
   return (
     <form ref={formRef} action={action} className="flex flex-col gap-4">
@@ -73,48 +93,95 @@ export function FoodWasteForm({ ships, dict }: { ships: Option[]; dict: Dictiona
             </span>
             <span className="text-xs text-slate-400">{dict.kg}</span>
           </div>
-          <div className="flex items-center justify-between rounded-xl bg-slate-50 px-2 py-1.5">
-            <button
-              type="button"
-              onClick={() => setKg((k) => ({ ...k, [row.key]: round1(k[row.key] - 0.2) }))}
-              className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-2xl font-bold text-red-700"
+
+          <div className="flex flex-col gap-2">
+            <Field label={dict.foodUsed} htmlFor={`foodUsed${row.key}`} error={fieldErrorFor(row.key, "foodUsed")}>
+              <Input
+                id={`foodUsed${row.key}`}
+                name={`foodUsed${row.key}`}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={0.1}
+                required
+                value={meals[row.key].foodUsed}
+                onChange={(e) => setField(row.key, "foodUsed", e.target.value)}
+              />
+            </Field>
+            <Field
+              label={dict.passengerWaste}
+              htmlFor={`passengerWaste${row.key}`}
+              error={fieldErrorFor(row.key, "passengerWaste")}
             >
-              −
-            </button>
-            <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step={0.1}
-              value={kg[row.key]}
-              onChange={(e) => {
-                const num = Number(e.target.value);
-                setKg((k) => ({ ...k, [row.key]: Number.isFinite(num) ? round1(Math.max(0, num)) : 0 }));
-              }}
-              className="w-20 rounded-lg bg-transparent text-center text-2xl font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
-            />
-            <button
-              type="button"
-              onClick={() => setKg((k) => ({ ...k, [row.key]: round1(k[row.key] + 0.2) }))}
-              className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-700 text-2xl font-bold text-white"
+              <Input
+                id={`passengerWaste${row.key}`}
+                name={`passengerWaste${row.key}`}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={0.1}
+                required
+                value={meals[row.key].passengerWaste}
+                onChange={(e) => setField(row.key, "passengerWaste", e.target.value)}
+              />
+            </Field>
+            <Field
+              label={dict.kitchenWaste}
+              htmlFor={`kitchenWaste${row.key}`}
+              error={fieldErrorFor(row.key, "kitchenWaste")}
             >
-              +
-            </button>
+              <Input
+                id={`kitchenWaste${row.key}`}
+                name={`kitchenWaste${row.key}`}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={0.1}
+                required
+                value={meals[row.key].kitchenWaste}
+                onChange={(e) => setField(row.key, "kitchenWaste", e.target.value)}
+              />
+            </Field>
+
+            {prepOpen[row.key] ? (
+              <Field
+                label={dict.prepWaste}
+                htmlFor={`prepWaste${row.key}`}
+                error={fieldErrorFor(row.key, "prepWaste")}
+              >
+                <Input
+                  id={`prepWaste${row.key}`}
+                  name={`prepWaste${row.key}`}
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step={0.1}
+                  value={meals[row.key].prepWaste}
+                  onChange={(e) => setField(row.key, "prepWaste", e.target.value)}
+                />
+              </Field>
+            ) : (
+              <>
+                {/* Meegestuurd als 0 zolang de sectie dicht is -- prepWaste is
+                    optioneel, vrijwel geen enkele locatie houdt dit apart bij. */}
+                <input type="hidden" name={`prepWaste${row.key}`} value={meals[row.key].prepWaste || "0"} />
+                <button
+                  type="button"
+                  onClick={() => setPrepOpen((p) => ({ ...p, [row.key]: true }))}
+                  className="self-start text-xs font-medium text-red-700 hover:underline"
+                >
+                  {dict.addPrepWaste}
+                </button>
+              </>
+            )}
           </div>
-          <input type="hidden" name={`kg${row.key}`} value={kg[row.key]} />
         </div>
       ))}
-
-      {(state?.errors?.kgBreakfast || state?.errors?.kgLunch || state?.errors?.kgDinner) && (
-        <p className="text-sm text-red-600">
-          {state?.errors?.kgBreakfast?.[0] ?? state?.errors?.kgLunch?.[0] ?? state?.errors?.kgDinner?.[0]}
-        </p>
-      )}
 
       <div className="flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 p-4">
         <span className="text-sm font-bold text-red-800">{dict.totalToday}</span>
         <span className="text-xl font-extrabold text-red-700">
-          {total} <span className="text-sm">{dict.kg}</span>
+          {Math.round(totalOperationalWaste * 10) / 10} <span className="text-sm">{dict.kg}</span>
         </span>
       </div>
 

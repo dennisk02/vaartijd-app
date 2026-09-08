@@ -75,6 +75,11 @@ export interface Dictionary {
   tWaste: string;
   wasteNote: string;
   kg: string;
+  foodUsed: string;
+  passengerWaste: string;
+  kitchenWaste: string;
+  prepWaste: string;
+  addPrepWaste: string;
   saveWaste: string;
 
   tHistory: string;
@@ -176,6 +181,11 @@ const nl: Dictionary = {
   tWaste: "Voedselverspilling",
   wasteNote: "Weeg de voedselbak na elke dienst en vul de kilogrammen in.",
   kg: "kg",
+  foodUsed: "Voedsel gebruikt",
+  passengerWaste: "Passagiersafval",
+  kitchenWaste: "Keukenafval",
+  prepWaste: "Bereidingsafval",
+  addPrepWaste: "+ Bereidingsafval toevoegen",
   saveWaste: "Afval opslaan",
 
   tHistory: "Geschiedenis",
@@ -277,6 +287,11 @@ const en: Dictionary = {
   tWaste: "Food waste",
   wasteNote: "Weigh the food bin after each service and enter the kilograms.",
   kg: "kg",
+  foodUsed: "Food used",
+  passengerWaste: "Passenger waste",
+  kitchenWaste: "Kitchen waste",
+  prepWaste: "Preparation waste",
+  addPrepWaste: "+ Add preparation waste",
   saveWaste: "Save waste",
 
   tHistory: "History",
@@ -378,6 +393,11 @@ const uk: Dictionary = {
   tWaste: "Харчові відходи",
   wasteNote: "Зважте контейнер з відходами після кожного прийому їжі та введіть кілограми.",
   kg: "кг",
+  foodUsed: "Використано їжі",
+  passengerWaste: "Відходи пасажирів",
+  kitchenWaste: "Кухонні відходи",
+  prepWaste: "Відходи приготування",
+  addPrepWaste: "+ Додати відходи приготування",
   saveWaste: "Зберегти відходи",
 
   tHistory: "Історія",
@@ -479,6 +499,11 @@ const ar: Dictionary = {
   tWaste: "هدر الطعام",
   wasteNote: "زِن حاوية الطعام بعد كل وجبة وأدخل عدد الكيلوغرامات.",
   kg: "كغ",
+  foodUsed: "الطعام المستخدم",
+  passengerWaste: "هدر الركاب",
+  kitchenWaste: "هدر المطبخ",
+  prepWaste: "هدر التحضير",
+  addPrepWaste: "+ إضافة هدر التحضير",
   saveWaste: "حفظ الهدر",
 
   tHistory: "السجل",

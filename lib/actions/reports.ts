@@ -107,12 +107,13 @@ export async function getMealsServedReport(period: ReportPeriod) {
 }
 
 /**
- * Voedselverspilling in kg per dag, over de gekozen periode.
- * "Gewogen gemiddelde" hier = gram afval per geserveerde maaltijd
- * (totaal kg afval x 1000 / totaal aantal maaltijden in dezelfde periode)
- * -- een eerlijkere maat dan een gemiddelde van dagtotalen, omdat een dag
- * met weinig geserveerde maaltijden anders even zwaar meetelt als een
- * drukke dag.
+ * Operationele voedselverspilling (passagiers + keuken) in kg per dag, over
+ * de gekozen periode -- bereidingsafval telt hier bewust niet mee (net als
+ * Victor Mshati's brondashboard, sep 2026: "Operational Waste"). "Gewogen
+ * gemiddelde" hier = gram afval per geserveerde maaltijd (totaal kg afval x
+ * 1000 / totaal aantal maaltijden in dezelfde periode) -- een eerlijkere
+ * maat dan een gemiddelde van dagtotalen, omdat een dag met weinig
+ * geserveerde maaltijden anders even zwaar meetelt als een drukke dag.
  */
 export async function getFoodWasteReport(period: ReportPeriod) {
   await requireAdminScope("RAPPORTAGES");
@@ -121,7 +122,7 @@ export async function getFoodWasteReport(period: ReportPeriod) {
   const [wasteRecords, mealRecords] = await Promise.all([
     prisma.foodWaste.findMany({
       where: { date: { gte: start, lt: end } },
-      select: { date: true, kg: true },
+      select: { date: true, passengerWasteKg: true, kitchenWasteKg: true },
     }),
     prisma.mealCount.aggregate({
       where: { date: { gte: start, lt: end } },
@@ -133,7 +134,7 @@ export async function getFoodWasteReport(period: ReportPeriod) {
   let totalKg = 0;
   for (const record of wasteRecords) {
     const key = record.date.toISOString().slice(0, 10);
-    const kg = Number(record.kg);
+    const kg = Number(record.passengerWasteKg) + Number(record.kitchenWasteKg);
     byDate.set(key, (byDate.get(key) ?? 0) + kg);
     totalKg += kg;
   }

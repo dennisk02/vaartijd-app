@@ -61,19 +61,25 @@ export default async function AfvalPage() {
         <div className="flex flex-col gap-3">
           <h2 className="text-sm font-medium text-slate-500">{dict.tHistory}</h2>
           {wasteEntries.length === 0 && <p className="text-sm text-slate-500">{dict.noEntries}</p>}
-          {wasteEntries.map((entry) => (
-            <Card key={entry.id} className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">
-                  {entry.ship.name} · {mealLabels[entry.mealType]}
+          {wasteEntries.map((entry) => {
+            const operationalWaste = Number(entry.passengerWasteKg) + Number(entry.kitchenWasteKg);
+            return (
+              <Card key={entry.id} className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">
+                    {entry.ship.name} · {mealLabels[entry.mealType]}
+                  </p>
+                  <p className="text-sm text-slate-500">{entry.date.toISOString().slice(0, 10)}</p>
+                  <p className="text-xs text-slate-400">
+                    {dict.foodUsed} {Number(entry.foodUsedKg).toFixed(1)} {dict.kg}
+                  </p>
+                </div>
+                <p className="text-lg font-semibold text-red-800">
+                  {operationalWaste.toFixed(1)} {dict.kg}
                 </p>
-                <p className="text-sm text-slate-500">{entry.date.toISOString().slice(0, 10)}</p>
-              </div>
-              <p className="text-lg font-semibold text-red-800">
-                {Number(entry.kg).toFixed(1)} {dict.kg}
-              </p>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       </main>
     </>

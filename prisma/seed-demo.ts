@@ -180,7 +180,9 @@ async function main() {
     shipId: string;
     date: Date;
     mealType: MealType;
-    kg: number;
+    foodUsedKg: number;
+    passengerWasteKg: number;
+    kitchenWasteKg: number;
     createdById: string;
   }[] = [];
 
@@ -222,10 +224,26 @@ async function main() {
         const eaters =
           mealType === "BREAKFAST" ? dayOnboard : Math.round((dayOnboard + nightOnboard) / 2);
         const countServed = Math.max(0, Math.round(eaters * randFloat(0.85, 1.05)));
-        const wasteKg = Math.round(countServed * randFloat(0.05, 0.2) * 10) / 10;
+        const foodUsedKg = Math.round(countServed * randFloat(0.35, 0.55) * 10) / 10;
+        const totalWasteKg = Math.round(countServed * randFloat(0.05, 0.2) * 10) / 10;
+        // Passagiersafval is doorgaans het grootste deel (bordafval), keukenafval
+        // de rest (bereidingsoverschot) -- zelfde verhouding als River Roots'
+        // eigen Food Waste Dashboard (sep 2026), waar de meeste locaties
+        // 50-90% passagiersaandeel hadden.
+        const passengerShare = randFloat(0.55, 0.85);
+        const passengerWasteKg = Math.round(totalWasteKg * passengerShare * 10) / 10;
+        const kitchenWasteKg = Math.round((totalWasteKg - passengerWasteKg) * 10) / 10;
 
         mealCountRows.push({ shipId: ship.id, date, mealType, countServed, createdById: firstEmployeeId });
-        foodWasteRows.push({ shipId: ship.id, date, mealType, kg: wasteKg, createdById: firstEmployeeId });
+        foodWasteRows.push({
+          shipId: ship.id,
+          date,
+          mealType,
+          foodUsedKg,
+          passengerWasteKg,
+          kitchenWasteKg,
+          createdById: firstEmployeeId,
+        });
       }
     }
 

@@ -257,20 +257,42 @@ model MealCount {
   @@index([createdById, date])
 }
 
-/// Voedselverspilling in kg per maaltijdtype.
+/// Voedselverspilling per maaltijdtype, uitgesplitst naar bron i.p.v. één
+/// totaalgetal (sep 2026, n.a.v. River Roots' eigen Food Waste Dashboard
+/// van Victor Mshati -- zelfde uitsplitsing). Percentages (operationeel/
+/// totaal) worden altijd berekend uit deze kilo's, nooit apart opgeslagen.
+/// prepWasteKg is optioneel (default 0) omdat vrijwel geen enkele locatie
+/// dat apart bijhoudt.
 model FoodWaste {
-  id          String   @id @default(cuid())
-  shipId      String
-  ship        Ship     @relation(fields: [shipId], references: [id], onDelete: Cascade)
-  date        DateTime
-  mealType    MealType
-  kg          Decimal  @db.Decimal(6, 2)
-  createdById String
-  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt   DateTime @default(now())
+  id               String          @id @default(cuid())
+  shipId           String
+  ship             Ship            @relation(fields: [shipId], references: [id], onDelete: Cascade)
+  date             DateTime
+  mealType         MealType
+  foodUsedKg       Decimal         @db.Decimal(7, 2)
+  passengerWasteKg Decimal         @db.Decimal(6, 2)
+  kitchenWasteKg   Decimal         @db.Decimal(6, 2)
+  prepWasteKg      Decimal         @default(0) @db.Decimal(6, 2)
+  /// CREW = ingevuld via het Vaartijd-formulier, IMPORT = ingelezen uit een
+  /// extern dashboard (bv. Victor's maandelijkse Excel-consolidatie) zolang
+  /// niet elke locatie zelf in Vaartijd invoert.
+  source           FoodWasteSource @default(CREW)
+  /// Alleen gevuld bij source=IMPORT -- welk brondocument dit was, voor
+  /// traceerbaarheid (zie /admin/voedselverspilling, Data-kwaliteit).
+  sourceFile       String?
+  dataQualityFlag  String?
+  notes            String?
+  createdById      String
+  createdBy        User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt        DateTime        @default(now())
 
   @@unique([shipId, date, mealType])
   @@index([createdById, date])
+}
+
+enum FoodWasteSource {
+  CREW
+  IMPORT
 }
 
 /// Bundelt de registraties van één medewerker op één dag tot "ingediend".
