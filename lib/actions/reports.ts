@@ -2,7 +2,15 @@
 
 import { requireAdminScope } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getPeriodRange, bucketKey, bucketRangeKeys, nextBucketKeys, type ReportPeriod, type Granularity } from "@/lib/reports";
+import {
+  getPeriodRange,
+  bucketKey,
+  bucketRangeKeys,
+  nextBucketKeys,
+  trimToDataRange,
+  type ReportPeriod,
+  type Granularity,
+} from "@/lib/reports";
 import { analyzeTrend, type TrendAnalysis } from "@/lib/trend";
 
 const FORECAST_BUCKETS = 4;
@@ -17,9 +25,12 @@ function deviationBuckets(keys: string[], deviations: TrendAnalysis["deviations"
  * `undefined`/`null` betekent alle schepen (en kantoor-/niet-scheeps-
  * gebonden uren, want TimeEntry.shipId is nullable). "Gewogen gemiddelde" =
  * totaal aantal uren / aantal buckets met daadwerkelijk geregistreerde uren.
- * Bevat ook een eenvoudige lineaire trendvoorspelling voor de komende
- * periode en een lijst van buckets die significant van die trend afwijken
- * (zie lib/trend.ts).
+ * Toont alleen het bereik waar daadwerkelijk data zit (trimToDataRange) --
+ * anders zou bv. "Dit jaar" met pas sinds juni data maandenlang lege
+ * nulwaarden tonen en zou de forecast pas na het einde van het hele jaar
+ * beginnen i.p.v. vlak na de laatste echte registratie. Bevat ook een
+ * eenvoudige lineaire trendvoorspelling voor de komende periode en een
+ * lijst van buckets die significant van die trend afwijken (lib/trend.ts).
  */
 export async function getHoursReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
   await requireAdminScope("RAPPORTAGES");
@@ -41,7 +52,8 @@ export async function getHoursReport(period: ReportPeriod, shipId?: string | nul
     totalHours += hours;
   }
 
-  const keys = bucketRangeKeys(start, end, granularity);
+  const trimmed = trimToDataRange(entries.map((e) => e.date), start, end);
+  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity) : [];
   const values = keys.map((k) => Math.round((byBucket.get(k) ?? 0) * 100) / 100);
   const data = keys.map((date, i) => ({ date, hours: values[i] }));
 
@@ -64,7 +76,8 @@ export async function getHoursReport(period: ReportPeriod, shipId?: string | nul
  * apart, opgeteld binnen elke bucket). Optioneel gefilterd op één schip.
  * Bezetting = passagiers + bemanning per registratie. "Gewogen gemiddelde"
  * = totaal aantal geregistreerde personen / aantal registraties. Trend/
- * afwijkingen op het bucket-totaal (dag + nacht samen).
+ * afwijkingen op het bucket-totaal (dag + nacht samen). Toont alleen het
+ * bereik met daadwerkelijk data (zie getHoursReport hierboven).
  */
 export async function getOccupancyReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
   await requireAdminScope("RAPPORTAGES");
@@ -88,7 +101,8 @@ export async function getOccupancyReport(period: ReportPeriod, shipId?: string |
     totalPersons += total;
   }
 
-  const keys = bucketRangeKeys(start, end, granularity);
+  const trimmed = trimToDataRange(records.map((r) => r.date), start, end);
+  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity) : [];
   const data = keys.map((date) => {
     const bucket = byBucket.get(date) ?? { dag: 0, nacht: 0 };
     return { date, dag: bucket.dag, nacht: bucket.nacht };
@@ -111,7 +125,8 @@ export async function getOccupancyReport(period: ReportPeriod, shipId?: string |
 /**
  * Aantal geserveerde maaltijden, gegroepeerd per gekozen granulariteit.
  * Optioneel gefilterd op één schip. "Gewogen gemiddelde" = totaal aantal
- * maaltijden / aantal buckets met registraties.
+ * maaltijden / aantal buckets met registraties. Toont alleen het bereik
+ * met daadwerkelijk data (zie getHoursReport hierboven).
  */
 export async function getMealsServedReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
   await requireAdminScope("RAPPORTAGES");
@@ -132,7 +147,8 @@ export async function getMealsServedReport(period: ReportPeriod, shipId?: string
     totalServed += record.countServed;
   }
 
-  const keys = bucketRangeKeys(start, end, granularity);
+  const trimmed = trimToDataRange(records.map((r) => r.date), start, end);
+  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity) : [];
   const values = keys.map((k) => byBucket.get(k) ?? 0);
   const data = keys.map((date, i) => ({ date, count: values[i] }));
 

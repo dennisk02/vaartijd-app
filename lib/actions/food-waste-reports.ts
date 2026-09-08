@@ -7,6 +7,7 @@ import {
   bucketKey,
   bucketRangeKeys,
   nextBucketKeys,
+  trimToDataRange,
   type ReportPeriod,
   type Granularity,
 } from "@/lib/reports";
@@ -199,7 +200,8 @@ export async function getFoodWasteDailyReport(period: ReportPeriod, shipId?: str
     byBucket.set(key, bucket);
   }
 
-  const keys = bucketRangeKeys(start, end, granularity);
+  const trimmed = trimToDataRange(rows.map((r) => r.date), start, end);
+  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity) : [];
   const data: DailyWasteRow[] = keys.map((date) => {
     const bucket = byBucket.get(date) ?? { foodUsedKg: 0, operationalWasteKg: 0 };
     return { date, foodUsedKg: Math.round(bucket.foodUsedKg * 10) / 10, operationalWasteKg: Math.round(bucket.operationalWasteKg * 10) / 10 };

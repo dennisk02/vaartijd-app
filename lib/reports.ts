@@ -106,6 +106,26 @@ export function bucketRangeKeys(start: Date, end: Date, granularity: Granularity
   return keys;
 }
 
+/**
+ * Beperkt het te tonen bereik tot waar daadwerkelijk registraties zijn --
+ * anders toont een brede periode (bv. "Dit jaar" met pas sinds juni data)
+ * maandenlang lege nulwaarden, en start de forecast pas na het einde van
+ * de hele periode i.p.v. vlak na de laatste echte registratie. Geeft
+ * `null` terug als er helemaal geen data is (dan toont de rapportage zijn
+ * eigen "geen data"-melding, geen lege reeks).
+ */
+export function trimToDataRange(dates: Date[], periodStart: Date, periodEnd: Date): { start: Date; end: Date } | null {
+  if (dates.length === 0) return null;
+  const times = dates.map((d) => d.getTime());
+  const earliest = new Date(Math.min(...times));
+  const latest = new Date(Math.max(...times));
+  latest.setDate(latest.getDate() + 1); // exclusief eind, net als periodEnd
+  return {
+    start: earliest < periodStart ? periodStart : earliest,
+    end: latest > periodEnd ? periodEnd : latest,
+  };
+}
+
 /** Genereert `count` toekomstige bucket-sleutels na `lastKey`, voor de
  * forecast-reeks (zelfde granulariteit als de historische data). */
 export function nextBucketKeys(lastKey: string, count: number, granularity: Granularity): string[] {
