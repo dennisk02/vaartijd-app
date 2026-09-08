@@ -1,16 +1,16 @@
 /**
- * Simpele, uitlegbare trendberekening voor de rapportages (§ n.a.v. "forecast
- * + afwijkingen"-verzoek, sep 2026) -- bewust gewone lineaire regressie i.p.v.
- * een zwaardere tijdreeksmodel: genoeg om een richting en een grove
- * verwachting te tonen, en voor een admin-dashboard beter uit te leggen dan
- * een black-box-voorspelling.
+ * Simpele, uitlegbare afwijkingsdetectie voor de rapportages (§ n.a.v.
+ * "afwijkt van de trend"-verzoek, sep 2026) -- bewust gewone lineaire
+ * regressie i.p.v. een zwaarder tijdreeksmodel: genoeg om te herkennen
+ * welke punten duidelijk uit de pas lopen, en voor een admin-dashboard
+ * beter uit te leggen dan een black-box-model. Toont zelf geen
+ * voorspellingslijn (op verzoek verwijderd, sep 2026) -- alleen de
+ * afwijkingen.
  */
 
 export type TrendAnalysis = {
-  /** Trendwaarde per bestaand (historisch) punt, zelfde lengte als de input. */
+  /** Trendwaarde per bestaand punt, zelfde lengte als de input. */
   trendLine: number[];
-  /** Voorspelde waarden voor de komende `forecastCount` punten, nooit negatief. */
-  forecast: number[];
   /** Indexen (in de input) die significant afwijken van de trendlijn. */
   deviations: { index: number; actual: number; expected: number }[];
 };
@@ -35,11 +35,11 @@ function linearRegression(values: number[]): { slope: number; intercept: number 
  * residuen) voordat het als afwijkend geldt; 1,5 raakt in de praktijk de
  * duidelijke uitschieters zonder elke kleine schommeling te markeren.
  */
-export function analyzeTrend(values: number[], forecastCount: number, thresholdStdDev = 1.5): TrendAnalysis {
-  if (values.length < 4) {
-    // Te weinig data voor een zinvolle trend/afwijkingsanalyse.
+export function analyzeTrend(values: number[], minPoints = 4, thresholdStdDev = 1.5): TrendAnalysis {
+  if (values.length < minPoints) {
+    // Te weinig data voor een zinvolle afwijkingsanalyse.
     const last = values.length > 0 ? values[values.length - 1] : 0;
-    return { trendLine: values.map(() => last), forecast: Array(forecastCount).fill(last), deviations: [] };
+    return { trendLine: values.map(() => last), deviations: [] };
   }
 
   const { slope, intercept } = linearRegression(values);
@@ -60,22 +60,5 @@ export function analyzeTrend(values: number[], forecastCount: number, thresholdS
     });
   }
 
-  const forecast = Array.from({ length: forecastCount }, (_, i) => {
-    const x = values.length + i;
-    return Math.max(0, slope * x + intercept);
-  });
-
-  return { trendLine, forecast, deviations };
-}
-
-/** Maandreeks (YYYY-MM) met N maanden na de laatste maand -- gebruikt door
- * de bedrijfsbrede maandtrend (lib/actions/food-waste-reports.ts), die
- * bewust altijd maandelijks blijft en geen granulariteitskeuze heeft (zie
- * lib/reports.ts voor die generieke dag/week/maand/kwartaal-bucketing). */
-export function nextMonths(lastMonthStr: string, count: number): string[] {
-  const [year, month] = lastMonthStr.split("-").map(Number);
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(year, month - 1 + i + 1, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
+  return { trendLine, deviations };
 }

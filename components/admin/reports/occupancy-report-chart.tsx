@@ -1,18 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import {
-  Bar,
-  ComposedChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getOccupancyReport } from "@/lib/actions/reports";
 import { bucketLabel, type ReportPeriod, type Granularity } from "@/lib/reports";
 import { Card, Field, Input } from "@/components/ui";
@@ -42,23 +31,12 @@ export function OccupancyReportChart({ ships }: { ships: { id: string; name: str
 
   const targetValue = target === "" ? null : Number(target);
 
-  const chartData: { date: string; dag: number | null; nacht: number | null; forecastTotaal: number | null }[] = report
-    ? [
-        ...report.data.map((d) => ({ date: d.date, dag: d.dag, nacht: d.nacht, forecastTotaal: null })),
-        ...report.forecast.map((f) => ({ date: f.date, dag: null, nacht: null, forecastTotaal: f.totaal })),
-      ]
-    : [];
-  if (report && report.data.length > 0 && report.forecast.length > 0) {
-    const last = report.data[report.data.length - 1];
-    chartData[report.data.length - 1].forecastTotaal = last.dag + last.nacht;
-  }
-
   return (
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-medium text-slate-800">Scheepsbezetting per dag</h2>
-          <p className="text-sm text-slate-500">Aantal personen aan boord, dag en nacht apart, met trendvoorspelling op het totaal.</p>
+          <p className="text-sm text-slate-500">Aantal personen aan boord, dag en nacht apart.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
@@ -70,7 +48,7 @@ export function OccupancyReportChart({ ships }: { ships: { id: string; name: str
       <div className="h-64 w-full" style={{ opacity: isPending ? 0.5 : 1 }}>
         {report && report.data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData}>
+            <BarChart data={report.data}>
               <CartesianGrid vertical={false} stroke={chartColors.gridline} />
               <XAxis
                 dataKey="date"
@@ -94,15 +72,6 @@ export function OccupancyReportChart({ ships }: { ships: { id: string; name: str
               <Legend wrapperStyle={{ fontSize: 12, color: chartColors.secondaryInk }} iconType="line" iconSize={12} />
               <Bar dataKey="dag" name="Dag" fill={chartColors.blue} radius={[4, 4, 0, 0]} maxBarSize={20} />
               <Bar dataKey="nacht" name="Nacht" fill={chartColors.aqua} radius={[4, 4, 0, 0]} maxBarSize={20} />
-              <Line
-                dataKey="forecastTotaal"
-                name="Voorspelling (totaal)"
-                stroke={chartColors.mutedInk}
-                strokeDasharray="5 3"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
               {report.weightedAverage > 0 && (
                 <ReferenceLine
                   y={report.weightedAverage}
@@ -119,7 +88,7 @@ export function OccupancyReportChart({ ships }: { ships: { id: string; name: str
                   label={{ value: "Doel", position: "insideBottomRight", fontSize: 11, fill: chartColors.mutedInk }}
                 />
               )}
-            </ComposedChart>
+            </BarChart>
           </ResponsiveContainer>
         ) : (
           <p className="flex h-full items-center justify-center text-sm text-slate-500">

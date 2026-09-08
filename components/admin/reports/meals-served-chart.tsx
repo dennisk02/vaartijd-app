@@ -1,17 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import {
-  Bar,
-  ComposedChart,
-  CartesianGrid,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getMealsServedReport } from "@/lib/actions/reports";
 import { bucketLabel, type ReportPeriod, type Granularity } from "@/lib/reports";
 import { Card, Field, Input } from "@/components/ui";
@@ -41,22 +31,12 @@ export function MealsServedChart({ ships }: { ships: { id: string; name: string 
 
   const targetValue = target === "" ? null : Number(target);
 
-  const chartData: { date: string; count: number | null; forecastCount: number | null }[] = report
-    ? [
-        ...report.data.map((d) => ({ date: d.date, count: d.count, forecastCount: null })),
-        ...report.forecast.map((f) => ({ date: f.date, count: null, forecastCount: f.count })),
-      ]
-    : [];
-  if (report && report.data.length > 0 && report.forecast.length > 0) {
-    chartData[report.data.length - 1].forecastCount = chartData[report.data.length - 1].count;
-  }
-
   return (
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-medium text-slate-800">Maaltijden geserveerd per dag</h2>
-          <p className="text-sm text-slate-500">Totaal aantal geserveerde maaltijden, opgeteld per dag, met trendvoorspelling.</p>
+          <p className="text-sm text-slate-500">Totaal aantal geserveerde maaltijden, opgeteld per dag.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
@@ -68,7 +48,7 @@ export function MealsServedChart({ ships }: { ships: { id: string; name: string 
       <div className="h-64 w-full" style={{ opacity: isPending ? 0.5 : 1 }}>
         {report && report.data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData}>
+            <BarChart data={report.data}>
               <CartesianGrid vertical={false} stroke={chartColors.gridline} />
               <XAxis
                 dataKey="date"
@@ -90,15 +70,6 @@ export function MealsServedChart({ ships }: { ships: { id: string; name: string 
                 cursor={{ fill: chartColors.gridline, opacity: 0.4 }}
               />
               <Bar dataKey="count" name="Maaltijden" fill={chartColors.blue} radius={[4, 4, 0, 0]} maxBarSize={24} />
-              <Line
-                dataKey="forecastCount"
-                name="Voorspelling"
-                stroke={chartColors.mutedInk}
-                strokeDasharray="5 3"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
               {report.weightedAverage > 0 && (
                 <ReferenceLine
                   y={report.weightedAverage}
@@ -115,7 +86,7 @@ export function MealsServedChart({ ships }: { ships: { id: string; name: string 
                   label={{ value: "Doel", position: "insideBottomRight", fontSize: 11, fill: chartColors.mutedInk }}
                 />
               )}
-            </ComposedChart>
+            </BarChart>
           </ResponsiveContainer>
         ) : (
           <p className="flex h-full items-center justify-center text-sm text-slate-500">

@@ -6,14 +6,13 @@ import {
   getPeriodRange,
   bucketKey,
   bucketRangeKeys,
-  nextBucketKeys,
   trimToDataRange,
   type ReportPeriod,
   type Granularity,
 } from "@/lib/reports";
 import { analyzeTrend, type TrendAnalysis } from "@/lib/trend";
 
-const FORECAST_BUCKETS = 4;
+const TREND_WINDOW = 4;
 
 function deviationBuckets(keys: string[], deviations: TrendAnalysis["deviations"]) {
   return deviations.map((d) => ({ key: keys[d.index], actual: Math.round(d.actual * 10) / 10, expected: Math.round(d.expected * 10) / 10 }));
@@ -27,10 +26,9 @@ function deviationBuckets(keys: string[], deviations: TrendAnalysis["deviations"
  * totaal aantal uren / aantal buckets met daadwerkelijk geregistreerde uren.
  * Toont alleen het bereik waar daadwerkelijk data zit (trimToDataRange) --
  * anders zou bv. "Dit jaar" met pas sinds juni data maandenlang lege
- * nulwaarden tonen en zou de forecast pas na het einde van het hele jaar
- * beginnen i.p.v. vlak na de laatste echte registratie. Bevat ook een
- * eenvoudige lineaire trendvoorspelling voor de komende periode en een
- * lijst van buckets die significant van die trend afwijken (lib/trend.ts).
+ * nulwaarden tonen. Bevat een lijst van buckets die significant van de
+ * lineaire trend afwijken (lib/trend.ts) -- de voorspellingslijn zelf
+ * wordt niet getoond, alleen gebruikt om afwijkingen te herkennen.
  */
 export async function getHoursReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
   await requireAdminScope("RAPPORTAGES");
@@ -58,15 +56,13 @@ export async function getHoursReport(period: ReportPeriod, shipId?: string | nul
   const data = keys.map((date, i) => ({ date, hours: values[i] }));
 
   const weightedAverage = bucketsWithEntries > 0 ? totalHours / bucketsWithEntries : 0;
-  const { forecast, deviations } = analyzeTrend(values, FORECAST_BUCKETS);
-  const forecastKeys = keys.length > 0 ? nextBucketKeys(keys[keys.length - 1], FORECAST_BUCKETS, granularity) : [];
+  const { deviations } = analyzeTrend(values, TREND_WINDOW);
 
   return {
     data,
     totalHours,
     weightedAverage,
     unit: "uur" as const,
-    forecast: forecastKeys.map((date, i) => ({ date, hours: Math.round(forecast[i] * 10) / 10 })),
     deviations: deviationBuckets(keys, deviations).map((d) => ({ date: d.key, actual: d.actual, expected: d.expected })),
   };
 }
@@ -75,9 +71,9 @@ export async function getHoursReport(period: ReportPeriod, shipId?: string | nul
  * Scheepsbezetting, gegroepeerd per gekozen granulariteit (dag + nacht
  * apart, opgeteld binnen elke bucket). Optioneel gefilterd op één schip.
  * Bezetting = passagiers + bemanning per registratie. "Gewogen gemiddelde"
- * = totaal aantal geregistreerde personen / aantal registraties. Trend/
- * afwijkingen op het bucket-totaal (dag + nacht samen). Toont alleen het
- * bereik met daadwerkelijk data (zie getHoursReport hierboven).
+ * = totaal aantal geregistreerde personen / aantal registraties. Afwijkingen
+ * op het bucket-totaal (dag + nacht samen). Toont alleen het bereik met
+ * daadwerkelijk data (zie getHoursReport hierboven).
  */
 export async function getOccupancyReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
   await requireAdminScope("RAPPORTAGES");
@@ -110,14 +106,12 @@ export async function getOccupancyReport(period: ReportPeriod, shipId?: string |
   const totals = data.map((d) => d.dag + d.nacht);
 
   const weightedAverage = records.length > 0 ? totalPersons / records.length : 0;
-  const { forecast, deviations } = analyzeTrend(totals, FORECAST_BUCKETS);
-  const forecastKeys = keys.length > 0 ? nextBucketKeys(keys[keys.length - 1], FORECAST_BUCKETS, granularity) : [];
+  const { deviations } = analyzeTrend(totals, TREND_WINDOW);
 
   return {
     data,
     weightedAverage,
     unit: "personen" as const,
-    forecast: forecastKeys.map((date, i) => ({ date, totaal: Math.round(forecast[i]) })),
     deviations: deviationBuckets(keys, deviations).map((d) => ({ date: d.key, actual: d.actual, expected: d.expected })),
   };
 }
@@ -153,15 +147,13 @@ export async function getMealsServedReport(period: ReportPeriod, shipId?: string
   const data = keys.map((date, i) => ({ date, count: values[i] }));
 
   const weightedAverage = bucketsWithEntries > 0 ? totalServed / bucketsWithEntries : 0;
-  const { forecast, deviations } = analyzeTrend(values, FORECAST_BUCKETS);
-  const forecastKeys = keys.length > 0 ? nextBucketKeys(keys[keys.length - 1], FORECAST_BUCKETS, granularity) : [];
+  const { deviations } = analyzeTrend(values, TREND_WINDOW);
 
   return {
     data,
     totalServed,
     weightedAverage,
     unit: "maaltijden" as const,
-    forecast: forecastKeys.map((date, i) => ({ date, count: Math.round(forecast[i]) })),
     deviations: deviationBuckets(keys, deviations).map((d) => ({ date: d.key, actual: d.actual, expected: d.expected })),
   };
 }

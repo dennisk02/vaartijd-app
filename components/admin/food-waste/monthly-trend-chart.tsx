@@ -19,28 +19,12 @@ export function MonthlyTrendChart({ ships }: { ships: { id: string; name: string
     getFoodWasteMonthlyTrend(shipId || null).then(setReport);
   }, [shipId]);
 
-  const chartData: { month: string; foodUsedKg: number | null; operationalWasteKg: number | null; wastePercent: number | null; forecastOperationalWasteKg: number | null }[] = report
-    ? [
-        ...report.data.map((d) => ({ ...d, forecastOperationalWasteKg: null })),
-        ...report.forecast.map((f) => ({
-          month: f.month,
-          foodUsedKg: null,
-          operationalWasteKg: null,
-          wastePercent: null,
-          forecastOperationalWasteKg: f.operationalWasteKg,
-        })),
-      ]
-    : [];
-  if (report && report.data.length > 0 && report.forecast.length > 0) {
-    chartData[report.data.length - 1].forecastOperationalWasteKg = chartData[report.data.length - 1].operationalWasteKg;
-  }
-
   return (
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-medium text-slate-800">Maandtrend</h2>
-          <p className="text-sm text-slate-500">Voedsel gebruikt en operationele verspilling per maand, met trendvoorspelling.</p>
+          <p className="text-sm text-slate-500">Voedsel gebruikt en operationele verspilling per maand.</p>
         </div>
         <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
       </div>
@@ -48,7 +32,7 @@ export function MonthlyTrendChart({ ships }: { ships: { id: string; name: string
       <div className="h-64 w-full">
         {report && report.data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData}>
+            <ComposedChart data={report.data}>
               <CartesianGrid vertical={false} stroke={chartColors.gridline} />
               <XAxis
                 dataKey="month"
@@ -78,16 +62,6 @@ export function MonthlyTrendChart({ ships }: { ships: { id: string; name: string
                 fill={chartColors.red}
                 radius={[4, 4, 0, 0]}
                 maxBarSize={28}
-              />
-              <Line
-                yAxisId="kg"
-                dataKey="forecastOperationalWasteKg"
-                name="Voorspelling afval (kg)"
-                stroke={chartColors.mutedInk}
-                strokeDasharray="5 3"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
               />
               <Line yAxisId="pct" type="monotone" dataKey="wastePercent" name="Afval %" stroke={chartColors.secondaryInk} strokeWidth={2} dot={false} />
             </ComposedChart>

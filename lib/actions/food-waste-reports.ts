@@ -6,15 +6,13 @@ import {
   getPeriodRange,
   bucketKey,
   bucketRangeKeys,
-  nextBucketKeys,
   trimToDataRange,
   type ReportPeriod,
   type Granularity,
 } from "@/lib/reports";
-import { analyzeTrend, nextMonths, type TrendAnalysis } from "@/lib/trend";
+import { analyzeTrend, type TrendAnalysis } from "@/lib/trend";
 
-const FORECAST_BUCKETS = 4;
-const FORECAST_MONTHS = 2;
+const TREND_WINDOW = 4;
 
 function monthRangeKeys(startMonth: string, endMonth: string): string[] {
   const [startY, startM] = startMonth.split("-").map(Number);
@@ -180,7 +178,7 @@ export type DailyWasteRow = { date: string; foodUsedKg: number; operationalWaste
 
 /** Voedselverspilling (food used + operationeel afval), gegroepeerd per
  * gekozen granulariteit (dag/week/maand/kwartaal), optioneel per schip --
- * met trendvoorspelling en afwijkingen, zelfde opzet als de andere
+ * met afwijkingen t.o.v. de lineaire trend, zelfde opzet als de andere
  * rapportages (lib/actions/reports.ts). */
 export async function getFoodWasteDailyReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
   await requireAdminScope("RAPPORTAGES");
@@ -208,12 +206,10 @@ export async function getFoodWasteDailyReport(period: ReportPeriod, shipId?: str
   });
 
   const wasteValues = data.map((d) => d.operationalWasteKg);
-  const { forecast, deviations } = analyzeTrend(wasteValues, FORECAST_BUCKETS);
-  const forecastKeys = keys.length > 0 ? nextBucketKeys(keys[keys.length - 1], FORECAST_BUCKETS, granularity) : [];
+  const { deviations } = analyzeTrend(wasteValues, TREND_WINDOW);
 
   return {
     data,
-    forecast: forecastKeys.map((date, i) => ({ date, operationalWasteKg: Math.round(forecast[i] * 10) / 10 })),
     deviations: deviations.map((d) => ({
       date: keys[d.index],
       actual: Math.round(d.actual * 10) / 10,
@@ -224,8 +220,8 @@ export async function getFoodWasteDailyReport(period: ReportPeriod, shipId?: str
 
 export type MonthlyTrendRow = { month: string; foodUsedKg: number; operationalWasteKg: number; wastePercent: number };
 
-/** Maandtrend, optioneel per schip -- met trendvoorspelling (2 maanden
- * vooruit) en gevlagde afwijkende maanden. */
+/** Maandtrend, optioneel per schip -- met gevlagde afwijkende maanden
+ * t.o.v. de lineaire trend. */
 export async function getFoodWasteMonthlyTrend(shipId?: string | null) {
   await requireAdminScope("RAPPORTAGES");
 
@@ -235,7 +231,7 @@ export async function getFoodWasteMonthlyTrend(shipId?: string | null) {
   });
 
   if (rows.length === 0) {
-    return { data: [] as MonthlyTrendRow[], forecast: [] as { month: string; operationalWasteKg: number }[], deviations: [] as { month: string; actual: number; expected: number }[] };
+    return { data: [] as MonthlyTrendRow[], deviations: [] as { month: string; actual: number; expected: number }[] };
   }
 
   const byMonth = new Map<string, { foodUsedKg: number; operationalWasteKg: number }>();
@@ -261,12 +257,10 @@ export async function getFoodWasteMonthlyTrend(shipId?: string | null) {
   });
 
   const wasteValues = data.map((d) => d.operationalWasteKg);
-  const { forecast, deviations } = analyzeTrend(wasteValues, FORECAST_MONTHS);
-  const forecastMonths = months.length > 0 ? nextMonths(months[months.length - 1], FORECAST_MONTHS) : [];
+  const { deviations } = analyzeTrend(wasteValues, TREND_WINDOW);
 
   return {
     data,
-    forecast: forecastMonths.map((month, i) => ({ month, operationalWasteKg: Math.round(forecast[i] * 10) / 10 })),
     deviations: monthDeviations(months, deviations),
   };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Bar, ComposedChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getFoodWasteDailyReport } from "@/lib/actions/food-waste-reports";
 import { bucketLabel, type ReportPeriod, type Granularity } from "@/lib/reports";
 import { Card } from "@/components/ui";
@@ -14,10 +14,10 @@ import { chartColors } from "@/components/admin/reports/palette";
 
 type DailyReport = Awaited<ReturnType<typeof getFoodWasteDailyReport>>;
 
-/** Dagelijkse (of week/maand/kwartaal-)voedselverspilling, met trend-
- * voorspelling en afwijkingen -- was voorheen de simpele grafiek op
- * Rapportages, nu hier met dezelfde filters/opzet als de andere
- * rapportages i.p.v. een aparte, minder capabele versie. */
+/** Dagelijkse (of week/maand/kwartaal-)voedselverspilling met afwijkingen
+ * t.o.v. de trend -- was voorheen de simpele grafiek op Rapportages, nu
+ * hier met dezelfde filters/opzet als de andere rapportages i.p.v. een
+ * aparte, minder capabele versie. */
 export function DailyWasteChart({ ships }: { ships: { id: string; name: string }[] }) {
   const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
   const [shipId, setShipId] = useState("");
@@ -31,22 +31,12 @@ export function DailyWasteChart({ ships }: { ships: { id: string; name: string }
     });
   }, [period, shipId, granularity]);
 
-  const chartData: { date: string; foodUsedKg: number | null; operationalWasteKg: number | null; forecastOperationalWasteKg: number | null }[] = report
-    ? [
-        ...report.data.map((d) => ({ ...d, forecastOperationalWasteKg: null })),
-        ...report.forecast.map((f) => ({ date: f.date, foodUsedKg: null, operationalWasteKg: null, forecastOperationalWasteKg: f.operationalWasteKg })),
-      ]
-    : [];
-  if (report && report.data.length > 0 && report.forecast.length > 0) {
-    chartData[report.data.length - 1].forecastOperationalWasteKg = chartData[report.data.length - 1].operationalWasteKg;
-  }
-
   return (
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-medium text-slate-800">Voedselverspilling over tijd</h2>
-          <p className="text-sm text-slate-500">Voedsel gebruikt en operationeel afval, met trendvoorspelling.</p>
+          <p className="text-sm text-slate-500">Voedsel gebruikt en operationeel afval.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
@@ -58,7 +48,7 @@ export function DailyWasteChart({ ships }: { ships: { id: string; name: string }
       <div className="h-64 w-full" style={{ opacity: isPending ? 0.5 : 1 }}>
         {report && report.data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData}>
+            <BarChart data={report.data}>
               <CartesianGrid vertical={false} stroke={chartColors.gridline} />
               <XAxis
                 dataKey="date"
@@ -76,16 +66,7 @@ export function DailyWasteChart({ ships }: { ships: { id: string; name: string }
               />
               <Bar dataKey="foodUsedKg" name="Voedsel gebruikt" fill={chartColors.blue} radius={[4, 4, 0, 0]} maxBarSize={24} />
               <Bar dataKey="operationalWasteKg" name="Operationeel afval" fill={chartColors.red} radius={[4, 4, 0, 0]} maxBarSize={24} />
-              <Line
-                dataKey="forecastOperationalWasteKg"
-                name="Voorspelling afval"
-                stroke={chartColors.mutedInk}
-                strokeDasharray="5 3"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-            </ComposedChart>
+            </BarChart>
           </ResponsiveContainer>
         ) : (
           <p className="flex h-full items-center justify-center text-sm text-slate-500">
