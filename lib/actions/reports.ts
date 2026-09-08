@@ -5,18 +5,20 @@ import { prisma } from "@/lib/prisma";
 import { getPeriodRange, type ReportPeriod } from "@/lib/reports";
 
 /**
- * Uren per project, per dag, over de gekozen periode.
+ * Uren per project, per dag, over de gekozen periode. Optioneel gefilterd op
+ * één schip (`shipId`) -- `undefined`/`null` betekent alle schepen (en
+ * kantoor-/niet-scheepsgebonden uren, want TimeEntry.shipId is nullable).
  * "Gewogen gemiddelde" = totaal aantal uren / aantal dagen waarop
  * daadwerkelijk uren zijn geregistreerd (niet gedeeld door alle
  * kalenderdagen, anders zou een periode met veel niet-werkdagen het
  * gemiddelde kunstmatig verlagen).
  */
-export async function getHoursReport(period: ReportPeriod) {
+export async function getHoursReport(period: ReportPeriod, shipId?: string | null) {
   await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
   const entries = await prisma.timeEntry.findMany({
-    where: { date: { gte: start, lt: end } },
+    where: { date: { gte: start, lt: end }, ...(shipId ? { shipId } : {}) },
     select: { date: true, hours: true },
   });
 

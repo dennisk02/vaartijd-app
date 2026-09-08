@@ -15,23 +15,25 @@ import { getHoursReport } from "@/lib/actions/reports";
 import type { ReportPeriod } from "@/lib/reports";
 import { Card, Field, Input } from "@/components/ui";
 import { PeriodSelect } from "./period-select";
+import { ShipSelect } from "./ship-select";
 import { ChartTooltip } from "./chart-tooltip";
 import { chartColors } from "./palette";
 
 type HoursReport = Awaited<ReturnType<typeof getHoursReport>>;
 
-export function HoursReportChart() {
+export function HoursReportChart({ ships }: { ships: { id: string; name: string }[] }) {
   const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
+  const [shipId, setShipId] = useState("");
   const [report, setReport] = useState<HoursReport | null>(null);
   const [target, setTarget] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await getHoursReport(period);
+      const result = await getHoursReport(period, shipId || null);
       setReport(result);
     });
-  }, [period]);
+  }, [period, shipId]);
 
   const targetValue = target === "" ? null : Number(target);
 
@@ -42,7 +44,10 @@ export function HoursReportChart() {
           <h2 className="font-medium text-slate-800">Uren per dag</h2>
           <p className="text-sm text-slate-500">Totaal geregistreerde uren, opgeteld per dag.</p>
         </div>
-        <PeriodSelect value={period} onChange={setPeriod} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       <div className="h-64 w-full" style={{ opacity: isPending ? 0.5 : 1 }}>

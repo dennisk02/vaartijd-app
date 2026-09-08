@@ -1,4 +1,5 @@
 import { requireAdminScope } from "@/lib/dal";
+import { prisma } from "@/lib/prisma";
 import { HoursReportChart } from "@/components/admin/reports/hours-report-chart";
 import { OccupancyReportChart } from "@/components/admin/reports/occupancy-report-chart";
 import { MealsServedChart } from "@/components/admin/reports/meals-served-chart";
@@ -6,6 +7,13 @@ import { FoodWasteChart } from "@/components/admin/reports/food-waste-chart";
 
 export default async function AdminRapportagesPage() {
   await requireAdminScope("RAPPORTAGES");
+
+  const ships = await prisma.ship.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -16,7 +24,7 @@ export default async function AdminRapportagesPage() {
           vergelijking.
         </p>
       </div>
-      <HoursReportChart />
+      <HoursReportChart ships={ships} />
       <OccupancyReportChart />
       <MealsServedChart />
       <FoodWasteChart />
