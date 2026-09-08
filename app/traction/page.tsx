@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdminScope } from "@/lib/dal";
 import { OverzichtDashboard } from "@/components/traction/overzicht-dashboard";
+import { defaultTractionYear } from "@/lib/traction-year";
 
 export default async function TractionOverzichtPage({ searchParams }: { searchParams: Promise<{ jaar?: string }> }) {
   await requireAdminScope("TRACTION");
   const { jaar } = await searchParams;
 
-  const years = await prisma.tractionYear.findMany({ orderBy: { year: "desc" } });
-  const year = jaar ? Number(jaar) : years[0]?.year ?? new Date().getFullYear();
+  const years = await prisma.tractionYear.findMany({ orderBy: { year: "asc" } });
+  const year = jaar ? Number(jaar) : defaultTractionYear(years.map((y) => y.year));
 
   const [rocks, colleagues] = await Promise.all([
     prisma.rock.findMany({ where: { year }, include: { owner: true }, orderBy: { month: "asc" } }),

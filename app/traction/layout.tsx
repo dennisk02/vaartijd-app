@@ -8,6 +8,7 @@ import { traction } from "@/components/traction/colors";
 import { KernwaardenStrip } from "@/components/traction/kernwaarden-strip";
 import { TractionTabs } from "@/components/traction/tabs";
 import { YearSelector } from "@/components/traction/year-selector";
+import { defaultTractionYear } from "@/lib/traction-year";
 
 const robotoSlab = Roboto_Slab({ variable: "--font-roboto-slab", subsets: ["latin"], weight: ["400", "600", "700"] });
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
@@ -32,7 +33,7 @@ export default async function TractionLayout({ children }: { children: React.Rea
   ]);
 
   const yearNumbers = years.map((y) => y.year);
-  const currentYear = yearNumbers.length > 0 ? yearNumbers[yearNumbers.length - 1] : new Date().getFullYear();
+  const currentYear = defaultTractionYear(yearNumbers);
 
   return (
     <div

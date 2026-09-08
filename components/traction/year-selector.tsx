@@ -15,6 +15,12 @@ export function YearSelector({ years, currentYear }: { years: number[]; currentY
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
+  // De layout (waar deze component in staat) krijgt geen `searchParams` van
+  // Next.js door -- die leest hier dus zelf de querystring, met het
+  // server-berekende `currentYear` alleen als terugvaloptie wanneer er nog
+  // geen `?jaar=` in de URL staat.
+  const selectedYear = Number(searchParams.get("jaar")) || currentYear;
+
   function goToYear(year: number) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("jaar", String(year));
@@ -24,7 +30,7 @@ export function YearSelector({ years, currentYear }: { years: number[]; currentY
   return (
     <div className="flex items-center gap-2">
       <select
-        value={currentYear}
+        value={selectedYear}
         onChange={(e) => goToYear(Number(e.target.value))}
         className="rounded-full px-3 py-1.5 text-sm font-semibold"
         style={{ background: traction.navyDeep, color: traction.brassSoft, border: `1px solid ${traction.brass}` }}

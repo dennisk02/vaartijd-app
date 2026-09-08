@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminScope } from "@/lib/dal";
 import { RockForm } from "@/components/traction/rock-form";
 import { RocksBoard, MONTH_NAMES } from "@/components/traction/rocks-board";
+import { defaultTractionYear } from "@/lib/traction-year";
 
 function periodLabel(year: number, month: number) {
   return `${MONTH_NAMES[month - 1]} ${year}`;
@@ -23,10 +24,10 @@ export default async function TractionTakenPage({ searchParams }: { searchParams
     }),
     prisma.colleague.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     prisma.rockStatusOption.findMany({ orderBy: { order: "asc" } }),
-    prisma.tractionYear.findMany({ orderBy: { year: "desc" } }),
+    prisma.tractionYear.findMany({ orderBy: { year: "asc" } }),
   ]);
 
-  const currentYear = jaar ? Number(jaar) : years[0]?.year ?? new Date().getFullYear();
+  const currentYear = jaar ? Number(jaar) : defaultTractionYear(years.map((y) => y.year));
   const now = new Date();
   const defaultPeriod = `${currentYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 

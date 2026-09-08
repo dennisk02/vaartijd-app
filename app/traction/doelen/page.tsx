@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdminScope } from "@/lib/dal";
 import { DoelenCategorySection } from "@/components/traction/doelen-section";
+import { defaultTractionYear } from "@/lib/traction-year";
 
 const CATEGORIES: { key: string; label: string }[] = [
   { key: "financial", label: "Financieel" },
@@ -13,8 +14,8 @@ export default async function TractionDoelenPage({ searchParams }: { searchParam
   await requireAdminScope("TRACTION");
   const { jaar } = await searchParams;
 
-  const years = await prisma.tractionYear.findMany({ orderBy: { year: "desc" } });
-  const year = jaar ? Number(jaar) : years[0]?.year ?? new Date().getFullYear();
+  const years = await prisma.tractionYear.findMany({ orderBy: { year: "asc" } });
+  const year = jaar ? Number(jaar) : defaultTractionYear(years.map((y) => y.year));
 
   const [groups, statusOptions] = await Promise.all([
     prisma.goalCategoryGroup.findMany({
