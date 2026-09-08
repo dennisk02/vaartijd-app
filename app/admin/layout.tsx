@@ -6,6 +6,7 @@ import type { AdminScope } from "@prisma/client";
 
 const tabs: { href: string; label: string; scope: AdminScope }[] = [
   { href: "/admin/rapportages", label: "Rapportages", scope: "RAPPORTAGES" },
+  { href: "/admin/voedselverspilling", label: "Voedselverspilling", scope: "RAPPORTAGES" },
   { href: "/admin/projects", label: "Projecten", scope: "PROJECTS" },
   { href: "/admin/ships", label: "Schepen", scope: "SHIPS" },
   { href: "/admin/users", label: "Medewerkers", scope: "USERS" },
