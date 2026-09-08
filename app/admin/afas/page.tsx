@@ -4,7 +4,9 @@ import { requireAdminScope } from "@/lib/dal";
 import { Card, SyncStatusBadge } from "@/components/ui";
 import { AfasControls } from "@/components/admin/afas-controls";
 
-export default async function AdminAfasPage() {
+/** Zit ook, ongewijzigd, als tabblad in /admin/koppelingen (sep 2026,
+ * samengevoegde navigatie) -- deze route blijft ook los bereikbaar. */
+export async function AfasPageContent() {
   await requireAdminScope("AFAS");
   const configured = isAfasConfigured() && Boolean(process.env.AFAS_HOURS_CONNECTOR);
 
@@ -80,4 +82,8 @@ export default async function AdminAfasPage() {
       )}
     </div>
   );
+}
+
+export default async function AdminAfasPage() {
+  return <AfasPageContent />;
 }

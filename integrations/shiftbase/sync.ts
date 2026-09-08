@@ -147,11 +147,13 @@ async function syncCrewUsers() {
   return shiftbaseUsers.length;
 }
 
-/** Stap 3: uren van de afgelopen `days` dagen ophalen en als TimeEntry vastleggen. */
-async function syncTimesheets(days: number) {
-  const maxDate = new Date();
-  const minDate = new Date();
-  minDate.setUTCDate(minDate.getUTCDate() - days);
+/** Stap 3: uren in [minDate, maxDate] ophalen en als TimeEntry vastleggen.
+ * Shiftbase geeft een HTTP 500 bij een te groot bereik in één aanroep
+ * (bevestigd: 260 dagen faalt, de bestaande nachtelijke 35 dagen werkt al
+ * jarenlang probleemloos) -- voor een terugvulling over meerdere maanden
+ * moet dit dus in kleinere stukken aangeroepen worden, zie
+ * backfillShiftbaseTimesheets hieronder. */
+async function syncTimesheets(minDate: Date, maxDate: Date) {
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
   const response = (await shiftbaseGet(`/timesheets?min_date=${fmt(minDate)}&max_date=${fmt(maxDate)}`)) as {
@@ -280,11 +282,47 @@ async function syncTimesheets(days: number) {
 export async function syncShiftbaseCrew(days = 35) {
   const departmentCount = await syncShipsAndProjects();
   const userCount = await syncCrewUsers();
-  const timesheetResult = await syncTimesheets(days);
+
+  const maxDate = new Date();
+  const minDate = new Date();
+  minDate.setUTCDate(minDate.getUTCDate() - days);
+  const timesheetResult = await syncTimesheets(minDate, maxDate);
 
   return {
     departments: departmentCount,
     users: userCount,
     timesheets: timesheetResult,
   };
+}
+
+/**
+ * Eenmalige terugvulling van historische uren, verder terug dan de
+ * nachtelijke sync (35 dagen) gaat -- vraagt Shiftbase op in maandelijkse
+ * stukken (i.p.v. één aanroep over de hele periode) omdat een te groot
+ * bereik in één keer een HTTP 500 geeft. Roept schepen/projecten/
+ * medewerkers-sync bewust niet opnieuw aan (dat doet de nachtelijke sync
+ * toch al) -- alleen de uren zelf, per maand.
+ */
+export async function backfillShiftbaseTimesheets(sinceDate: Date) {
+  const results: { minDate: string; maxDate: string; total: number; processed: number }[] = [];
+  const now = new Date();
+  const cursor = new Date(sinceDate);
+
+  while (cursor < now) {
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + 30);
+    const maxDate = chunkEnd > now ? now : chunkEnd;
+
+    const result = await syncTimesheets(cursor, maxDate);
+    results.push({
+      minDate: cursor.toISOString().slice(0, 10),
+      maxDate: maxDate.toISOString().slice(0, 10),
+      total: result.total,
+      processed: result.processed,
+    });
+
+    cursor.setUTCDate(cursor.getUTCDate() + 30);
+  }
+
+  return results;
 }

@@ -5,8 +5,11 @@ import { toggleShipActive } from "@/lib/actions/admin";
 
 /** Schepen worden niet meer handmatig aangemaakt -- ze komen altijd uit de
  * Shiftbase-vaarbemanning-import (/admin/shiftbase), direct actief. Dit
- * scherm is nu puur overzicht + eventueel handmatig deactiveren. */
-export default async function AdminShipsPage() {
+ * scherm is nu puur overzicht + eventueel handmatig deactiveren.
+ *
+ * Zit ook, ongewijzigd, als tabblad in /admin/stamgegevens (sep 2026,
+ * samengevoegde navigatie) -- deze route blijft ook los bereikbaar. */
+export async function ShipsPageContent() {
   await requireAdminScope("SHIPS");
   const ships = await prisma.ship.findMany({ orderBy: { createdAt: "desc" } });
 
@@ -30,4 +33,8 @@ export default async function AdminShipsPage() {
       </div>
     </div>
   );
+}
+
+export default async function AdminShipsPage() {
+  return <ShipsPageContent />;
 }

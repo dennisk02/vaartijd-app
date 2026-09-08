@@ -1,20 +1,22 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdminScope } from "@/lib/dal";
 import { Card } from "@/components/ui";
-import { RentmanAfasTabs } from "@/components/admin/rentman-afas/tabs";
+import { TabSwitcher } from "@/components/admin/tab-switcher";
 import { ProjectExportTab } from "@/components/admin/rentman-afas/project-export-tab";
 import { InvoiceExportTab } from "@/components/admin/rentman-afas/invoice-export-tab";
 
 /**
- * Rentman -> AFAS overzicht/wachtrij (§10.8, 2 sep 2026) -- bewust los van
- * het financiële dashboard (/admin/rentman-financieel): op uitdrukkelijk
- * verzoek van de klant staat dit niet meer "in het dashboard". Twee
- * onderdelen, allebei al volledig aangesloten op een (nog niet bestaande)
- * AFAS-connector zodat alleen die laatste stap hoeft te worden ingevuld
- * zodra Willem een UpdateConnector vrijgeeft voor projectaanmaak resp.
- * verkoopboekingen.
+ * Rentman -> AFAS overzicht/wachtrij (§10.8, 2 sep 2026) -- twee onderdelen,
+ * allebei al volledig aangesloten op een (nog niet bestaande) AFAS-connector
+ * zodat alleen die laatste stap hoeft te worden ingevuld zodra Willem een
+ * UpdateConnector vrijgeeft voor projectaanmaak resp. verkoopboekingen.
+ *
+ * De content zit in `RentmanAfasPageContent` zodat dit tabblad ook
+ * ongewijzigd (met dezelfde volle breedte) hergebruikt kan worden binnen
+ * /admin/koppelingen (sep 2026, samengevoegde navigatie) -- deze route zelf
+ * blijft ook los bereikbaar (bv. voor een rechtstreekse link).
  */
-export default async function RentmanAfasPage() {
+export async function RentmanAfasPageContent() {
   await requireAdminScope("AFAS");
 
   const oneWeekAgo = new Date();
@@ -51,7 +53,7 @@ export default async function RentmanAfasPage() {
         </div>
 
         <Card>
-          <RentmanAfasTabs
+          <TabSwitcher
             tabs={[
               {
                 id: "projecten",
@@ -101,4 +103,10 @@ export default async function RentmanAfasPage() {
       </div>
     </div>
   );
+}
+
+/** Losse route (bv. voor een rechtstreekse link) -- de content zit ook,
+ * ongewijzigd, als tabblad in /admin/koppelingen. */
+export default async function RentmanAfasPage() {
+  return <RentmanAfasPageContent />;
 }

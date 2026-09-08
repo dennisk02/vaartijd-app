@@ -4,22 +4,28 @@ import { NavBar } from "@/components/nav";
 import { getDictionary } from "@/lib/i18n";
 import type { AdminScope } from "@prisma/client";
 
-const tabs: { href: string; label: string; scope: AdminScope }[] = [
+/** `scope` mag ook een lijst zijn (bv. Stamgegevens/Koppelingen, die meerdere
+ * eerder losse onderdelen samenvoegen, sep 2026) -- de tab is dan zichtbaar
+ * zodra de gebruiker minstens één van die scopes heeft. Welke sub-tabbladen
+ * er precies te zien zijn binnen zo'n samengevoegde pagina bepaalt de pagina
+ * zelf (zie app/admin/stamgegevens en app/admin/koppelingen). */
+const tabs: { href: string; label: string; scope: AdminScope | AdminScope[] }[] = [
   { href: "/admin/rapportages", label: "Rapportages", scope: "RAPPORTAGES" },
   { href: "/admin/voedselverspilling", label: "Voedselverspilling", scope: "RAPPORTAGES" },
-  { href: "/admin/projects", label: "Projecten", scope: "PROJECTS" },
-  { href: "/admin/ships", label: "Schepen", scope: "SHIPS" },
-  { href: "/admin/users", label: "Medewerkers", scope: "USERS" },
-  { href: "/admin/rentman-financieel", label: "Rentman financieel", scope: "RENTMAN_FINANCIEEL" },
-  { href: "/admin/rentman-afas", label: "Rentman → AFAS", scope: "AFAS" },
-  { href: "/admin/afas", label: "AFAS-koppeling", scope: "AFAS" },
-  { href: "/admin/shiftbase", label: "Shiftbase", scope: "SHIFTBASE" },
+  { href: "/admin/stamgegevens", label: "Stamgegevens", scope: ["PROJECTS", "SHIPS", "USERS"] },
+  { href: "/admin/rentman-financieel", label: "Rentman dashboard", scope: "RENTMAN_FINANCIEEL" },
+  { href: "/admin/koppelingen", label: "Koppelingen", scope: ["AFAS", "SHIFTBASE"] },
 ];
 
 /// Traction (§10.9) leeft bewust buiten /admin (eigen URL-structuur,
 /// /traction/*) -- hier alleen een link ernaartoe voor wie de scope heeft,
 /// puur voor vindbaarheid vanuit het admin-menu.
 const TRACTION_LINK = { href: "/traction", label: "Traction →", scope: "TRACTION" as AdminScope };
+
+function hasAnyScope(userScopes: AdminScope[], required: AdminScope | AdminScope[]) {
+  const list = Array.isArray(required) ? required : [required];
+  return list.some((s) => userScopes.includes(s));
+}
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireAnyAdminScope();
@@ -28,7 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // navigatie naar een niet-toegewezen sectie wordt alsnog door de
   // pagina-eigen requireAdminScope()-guard geblokkeerd.
   const allTabs = [...tabs, TRACTION_LINK];
-  const visibleTabs = user.role === "ADMIN" ? allTabs : allTabs.filter((tab) => user.adminScopes.includes(tab.scope));
+  const visibleTabs = user.role === "ADMIN" ? allTabs : allTabs.filter((tab) => hasAnyScope(user.adminScopes, tab.scope));
 
   return (
     <>

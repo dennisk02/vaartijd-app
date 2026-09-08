@@ -7,7 +7,9 @@ import { toggleUserActive } from "@/lib/actions/admin";
 
 const roleLabels: Record<string, string> = { EMPLOYEE: "Medewerker", ADMIN: "Beheerder" };
 
-export default async function AdminUsersPage() {
+/** Zit ook, ongewijzigd, als tabblad in /admin/stamgegevens (sep 2026,
+ * samengevoegde navigatie) -- deze route blijft ook los bereikbaar. */
+export async function UsersPageContent() {
   const currentUser = await requireAdminScope("USERS");
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
@@ -48,4 +50,8 @@ export default async function AdminUsersPage() {
       </div>
     </div>
   );
+}
+
+export default async function AdminUsersPage() {
+  return <UsersPageContent />;
 }

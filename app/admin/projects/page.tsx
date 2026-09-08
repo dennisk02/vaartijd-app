@@ -3,10 +3,13 @@ import { requireAdminScope } from "@/lib/dal";
 import { ProjectList } from "@/components/admin/project-list";
 
 /** Projecten worden niet meer handmatig aangemaakt -- ze komen altijd uit
- * Rentman (/admin/rentman) of de Shiftbase-vaarbemanning-import
- * (/admin/shiftbase). Dit scherm is puur overzicht: (de)activeren en de
- * AFAS-projectcode instellen voor de urenexport. */
-export default async function AdminProjectsPage() {
+ * Rentman of de Shiftbase-vaarbemanning-import (/admin/shiftbase). Dit
+ * scherm is puur overzicht: (de)activeren en de AFAS-projectcode instellen
+ * voor de urenexport.
+ *
+ * Zit ook, ongewijzigd, als tabblad in /admin/stamgegevens (sep 2026,
+ * samengevoegde navigatie) -- deze route blijft ook los bereikbaar. */
+export async function ProjectsPageContent() {
   await requireAdminScope("PROJECTS");
   const projects = await prisma.project.findMany({
     orderBy: { createdAt: "desc" },
@@ -32,4 +35,8 @@ export default async function AdminProjectsPage() {
       />
     </div>
   );
+}
+
+export default async function AdminProjectsPage() {
+  return <ProjectsPageContent />;
 }

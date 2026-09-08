@@ -6,7 +6,9 @@ import { ShiftbaseExplorer } from "@/components/admin/shiftbase-explorer";
 import { ShiftbaseHoursControls } from "@/components/admin/shiftbase-hours-controls";
 import { ShiftbaseCrewControls } from "@/components/admin/shiftbase-crew-controls";
 
-export default async function AdminShiftbasePage() {
+/** Zit ook, ongewijzigd, als tabblad in /admin/koppelingen (sep 2026,
+ * samengevoegde navigatie) -- deze route blijft ook los bereikbaar. */
+export async function ShiftbasePageContent() {
   await requireAdminScope("SHIFTBASE");
   const configured = isShiftbaseConfigured();
   const exportEnabled = isShiftbaseHoursExportEnabled();
@@ -135,4 +137,8 @@ export default async function AdminShiftbasePage() {
       </Card>
     </div>
   );
+}
+
+export default async function AdminShiftbasePage() {
+  return <ShiftbasePageContent />;
 }

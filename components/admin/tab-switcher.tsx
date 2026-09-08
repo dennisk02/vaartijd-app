@@ -2,10 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 
-/** Lichte tab-switcher, in stijl van de rest van /admin (i.t.t. de donkere
- * RentmanDashboardTabs op het financiële dashboard) -- deze pagina staat
- * bewust los van dat dashboard. */
-export function RentmanAfasTabs({ tabs }: { tabs: { id: string; label: string; content: ReactNode }[] }) {
+/** Lichte, generieke tab-switcher voor pagina's die meerdere eerder losse
+ * admin-onderdelen samenvoegen (bv. Stamgegevens, Koppelingen) -- alle
+ * tab-content wordt gerenderd, alleen de inactieve tabs worden visueel
+ * verborgen (i.p.v. server-side conditioneel), dus geef alleen tabs mee
+ * waar de gebruiker daadwerkelijk scope voor heeft. */
+export function TabSwitcher({ tabs }: { tabs: { id: string; label: string; content: ReactNode }[] }) {
   const [active, setActive] = useState(tabs[0]?.id ?? "");
 
   return (
