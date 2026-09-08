@@ -5,6 +5,7 @@ import { getFoodWasteLocationSummary, type LocationStatus } from "@/lib/actions/
 import type { ReportPeriod } from "@/lib/reports";
 import { Card } from "@/components/ui";
 import { PeriodSelect } from "@/components/admin/reports/period-select";
+import { ShipSelect } from "@/components/admin/reports/ship-select";
 
 const STATUS_LABEL: Record<LocationStatus, string> = { ACTION: "Actie", WATCH: "Aandacht", NO_DATA: "Geen data" };
 const STATUS_STYLE: Record<LocationStatus, string> = {
@@ -13,16 +14,17 @@ const STATUS_STYLE: Record<LocationStatus, string> = {
   NO_DATA: "bg-slate-100 text-slate-500",
 };
 
-export function LocationSummaryTable() {
+export function LocationSummaryTable({ ships }: { ships: { id: string; name: string }[] }) {
   const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
+  const [shipId, setShipId] = useState("");
   const [rows, setRows] = useState<Awaited<ReturnType<typeof getFoodWasteLocationSummary>> | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
-      setRows(await getFoodWasteLocationSummary(period));
+      setRows(await getFoodWasteLocationSummary(period, shipId || null));
     });
-  }, [period]);
+  }, [period, shipId]);
 
   return (
     <Card>
@@ -33,7 +35,10 @@ export function LocationSummaryTable() {
             Operationele verspilling (passagiers + keuken) t.o.v. gebruikt voedsel, per schip.
           </p>
         </div>
-        <PeriodSelect value={period} onChange={setPeriod} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       <div className="overflow-x-auto" style={{ opacity: isPending ? 0.5 : 1 }}>

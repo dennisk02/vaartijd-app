@@ -3,8 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import {
   Bar,
-  BarChart,
+  ComposedChart,
   CartesianGrid,
+  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -12,11 +13,13 @@ import {
   YAxis,
 } from "recharts";
 import { getHoursReport } from "@/lib/actions/reports";
-import type { ReportPeriod } from "@/lib/reports";
+import { bucketLabel, type ReportPeriod, type Granularity } from "@/lib/reports";
 import { Card, Field, Input } from "@/components/ui";
 import { PeriodSelect } from "./period-select";
 import { ShipSelect } from "./ship-select";
+import { GranularitySelect } from "./granularity-select";
 import { ChartTooltip } from "./chart-tooltip";
+import { DeviationNote } from "./deviation-note";
 import { chartColors } from "./palette";
 
 type HoursReport = Awaited<ReturnType<typeof getHoursReport>>;
@@ -24,28 +27,40 @@ type HoursReport = Awaited<ReturnType<typeof getHoursReport>>;
 export function HoursReportChart({ ships }: { ships: { id: string; name: string }[] }) {
   const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
   const [shipId, setShipId] = useState("");
+  const [granularity, setGranularity] = useState<Granularity>("DAY");
   const [report, setReport] = useState<HoursReport | null>(null);
   const [target, setTarget] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await getHoursReport(period, shipId || null);
+      const result = await getHoursReport(period, shipId || null, granularity);
       setReport(result);
     });
-  }, [period, shipId]);
+  }, [period, shipId, granularity]);
 
   const targetValue = target === "" ? null : Number(target);
+
+  const chartData: { date: string; hours: number | null; forecastHours: number | null }[] = report
+    ? [
+        ...report.data.map((d) => ({ date: d.date, hours: d.hours, forecastHours: null })),
+        ...report.forecast.map((f) => ({ date: f.date, hours: null, forecastHours: f.hours })),
+      ]
+    : [];
+  if (report && report.data.length > 0 && report.forecast.length > 0) {
+    chartData[report.data.length - 1].forecastHours = chartData[report.data.length - 1].hours;
+  }
 
   return (
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-medium text-slate-800">Uren per dag</h2>
-          <p className="text-sm text-slate-500">Totaal geregistreerde uren, opgeteld per dag.</p>
+          <p className="text-sm text-slate-500">Totaal geregistreerde uren, opgeteld per dag, met trendvoorspelling.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
+          <GranularitySelect value={granularity} onChange={setGranularity} />
           <PeriodSelect value={period} onChange={setPeriod} />
         </div>
       </div>
@@ -53,10 +68,11 @@ export function HoursReportChart({ ships }: { ships: { id: string; name: string 
       <div className="h-64 w-full" style={{ opacity: isPending ? 0.5 : 1 }}>
         {report && report.data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={report.data}>
+            <ComposedChart data={chartData}>
               <CartesianGrid vertical={false} stroke={chartColors.gridline} />
               <XAxis
                 dataKey="date"
+                tickFormatter={(v) => bucketLabel(v, granularity)}
                 tick={{ fontSize: 11, fill: chartColors.mutedInk }}
                 axisLine={{ stroke: chartColors.baseline }}
                 tickLine={false}
@@ -68,11 +84,21 @@ export function HoursReportChart({ ships }: { ships: { id: string; name: string 
                 width={32}
               />
               <Tooltip
+                labelFormatter={(v) => bucketLabel(String(v), granularity)}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v) => `${v} uur`} />}
                 cursor={{ fill: chartColors.gridline, opacity: 0.4 }}
               />
               <Bar dataKey="hours" name="Uren" fill={chartColors.blue} radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Line
+                dataKey="forecastHours"
+                name="Voorspelling"
+                stroke={chartColors.mutedInk}
+                strokeDasharray="5 3"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
               {report.weightedAverage > 0 && (
                 <ReferenceLine
                   y={report.weightedAverage}
@@ -89,7 +115,7 @@ export function HoursReportChart({ ships }: { ships: { id: string; name: string 
                   label={{ value: "Doel", position: "insideBottomRight", fontSize: 11, fill: chartColors.mutedInk }}
                 />
               )}
-            </BarChart>
+            </ComposedChart>
           </ResponsiveContainer>
         ) : (
           <p className="flex h-full items-center justify-center text-sm text-slate-500">
@@ -97,6 +123,13 @@ export function HoursReportChart({ ships }: { ships: { id: string; name: string 
           </p>
         )}
       </div>
+
+      {report && (
+        <DeviationNote
+          items={report.deviations.map((d) => ({ label: bucketLabel(d.date, granularity), actual: d.actual, expected: d.expected }))}
+          unit="uur"
+        />
+      )}
 
       <div className="mt-4 flex flex-wrap items-end gap-6">
         <div>

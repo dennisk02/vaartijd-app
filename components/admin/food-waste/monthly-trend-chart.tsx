@@ -3,28 +3,52 @@
 import { useEffect, useState } from "react";
 import { Bar, Line, ComposedChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getFoodWasteMonthlyTrend } from "@/lib/actions/food-waste-reports";
+import { ShipSelect } from "@/components/admin/reports/ship-select";
+import { DeviationNote } from "@/components/admin/reports/deviation-note";
 import { Card } from "@/components/ui";
 import { ChartTooltip } from "@/components/admin/reports/chart-tooltip";
 import { chartColors } from "@/components/admin/reports/palette";
 
-export function MonthlyTrendChart() {
-  const [data, setData] = useState<Awaited<ReturnType<typeof getFoodWasteMonthlyTrend>> | null>(null);
+type MonthlyTrend = Awaited<ReturnType<typeof getFoodWasteMonthlyTrend>>;
+
+export function MonthlyTrendChart({ ships }: { ships: { id: string; name: string }[] }) {
+  const [shipId, setShipId] = useState("");
+  const [report, setReport] = useState<MonthlyTrend | null>(null);
 
   useEffect(() => {
-    getFoodWasteMonthlyTrend().then(setData);
-  }, []);
+    getFoodWasteMonthlyTrend(shipId || null).then(setReport);
+  }, [shipId]);
+
+  const chartData: { month: string; foodUsedKg: number | null; operationalWasteKg: number | null; wastePercent: number | null; forecastOperationalWasteKg: number | null }[] = report
+    ? [
+        ...report.data.map((d) => ({ ...d, forecastOperationalWasteKg: null })),
+        ...report.forecast.map((f) => ({
+          month: f.month,
+          foodUsedKg: null,
+          operationalWasteKg: null,
+          wastePercent: null,
+          forecastOperationalWasteKg: f.operationalWasteKg,
+        })),
+      ]
+    : [];
+  if (report && report.data.length > 0 && report.forecast.length > 0) {
+    chartData[report.data.length - 1].forecastOperationalWasteKg = chartData[report.data.length - 1].operationalWasteKg;
+  }
 
   return (
     <Card>
-      <div className="mb-4">
-        <h2 className="font-medium text-slate-800">Maandtrend</h2>
-        <p className="text-sm text-slate-500">Voedsel gebruikt en operationele verspilling, bedrijfsbreed per maand.</p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-medium text-slate-800">Maandtrend</h2>
+          <p className="text-sm text-slate-500">Voedsel gebruikt en operationele verspilling per maand, met trendvoorspelling.</p>
+        </div>
+        <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
       </div>
 
       <div className="h-64 w-full">
-        {data && data.length > 0 ? (
+        {report && report.data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data}>
+            <ComposedChart data={chartData}>
               <CartesianGrid vertical={false} stroke={chartColors.gridline} />
               <XAxis
                 dataKey="month"
@@ -55,6 +79,16 @@ export function MonthlyTrendChart() {
                 radius={[4, 4, 0, 0]}
                 maxBarSize={28}
               />
+              <Line
+                yAxisId="kg"
+                dataKey="forecastOperationalWasteKg"
+                name="Voorspelling afval (kg)"
+                stroke={chartColors.mutedInk}
+                strokeDasharray="5 3"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
               <Line yAxisId="pct" type="monotone" dataKey="wastePercent" name="Afval %" stroke={chartColors.secondaryInk} strokeWidth={2} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -62,6 +96,10 @@ export function MonthlyTrendChart() {
           <p className="flex h-full items-center justify-center text-sm text-slate-500">Nog geen data.</p>
         )}
       </div>
+
+      {report && (
+        <DeviationNote items={report.deviations.map((d) => ({ label: d.month, actual: d.actual, expected: d.expected }))} unit="kg" />
+      )}
     </Card>
   );
 }

@@ -3,8 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import {
   Bar,
-  BarChart,
+  ComposedChart,
   CartesianGrid,
+  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -12,46 +13,66 @@ import {
   YAxis,
 } from "recharts";
 import { getMealsServedReport } from "@/lib/actions/reports";
-import type { ReportPeriod } from "@/lib/reports";
+import { bucketLabel, type ReportPeriod, type Granularity } from "@/lib/reports";
 import { Card, Field, Input } from "@/components/ui";
 import { PeriodSelect } from "./period-select";
+import { ShipSelect } from "./ship-select";
+import { GranularitySelect } from "./granularity-select";
 import { ChartTooltip } from "./chart-tooltip";
+import { DeviationNote } from "./deviation-note";
 import { chartColors } from "./palette";
 
 type MealsServedReport = Awaited<ReturnType<typeof getMealsServedReport>>;
 
-export function MealsServedChart() {
+export function MealsServedChart({ ships }: { ships: { id: string; name: string }[] }) {
   const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
+  const [shipId, setShipId] = useState("");
+  const [granularity, setGranularity] = useState<Granularity>("DAY");
   const [report, setReport] = useState<MealsServedReport | null>(null);
   const [target, setTarget] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await getMealsServedReport(period);
+      const result = await getMealsServedReport(period, shipId || null, granularity);
       setReport(result);
     });
-  }, [period]);
+  }, [period, shipId, granularity]);
 
   const targetValue = target === "" ? null : Number(target);
+
+  const chartData: { date: string; count: number | null; forecastCount: number | null }[] = report
+    ? [
+        ...report.data.map((d) => ({ date: d.date, count: d.count, forecastCount: null })),
+        ...report.forecast.map((f) => ({ date: f.date, count: null, forecastCount: f.count })),
+      ]
+    : [];
+  if (report && report.data.length > 0 && report.forecast.length > 0) {
+    chartData[report.data.length - 1].forecastCount = chartData[report.data.length - 1].count;
+  }
 
   return (
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-medium text-slate-800">Maaltijden geserveerd per dag</h2>
-          <p className="text-sm text-slate-500">Totaal aantal geserveerde maaltijden, opgeteld per dag.</p>
+          <p className="text-sm text-slate-500">Totaal aantal geserveerde maaltijden, opgeteld per dag, met trendvoorspelling.</p>
         </div>
-        <PeriodSelect value={period} onChange={setPeriod} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
+          <GranularitySelect value={granularity} onChange={setGranularity} />
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       <div className="h-64 w-full" style={{ opacity: isPending ? 0.5 : 1 }}>
         {report && report.data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={report.data}>
+            <ComposedChart data={chartData}>
               <CartesianGrid vertical={false} stroke={chartColors.gridline} />
               <XAxis
                 dataKey="date"
+                tickFormatter={(v) => bucketLabel(v, granularity)}
                 tick={{ fontSize: 11, fill: chartColors.mutedInk }}
                 axisLine={{ stroke: chartColors.baseline }}
                 tickLine={false}
@@ -63,11 +84,21 @@ export function MealsServedChart() {
                 width={32}
               />
               <Tooltip
+                labelFormatter={(v) => bucketLabel(String(v), granularity)}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v) => `${v} maaltijden`} />}
                 cursor={{ fill: chartColors.gridline, opacity: 0.4 }}
               />
               <Bar dataKey="count" name="Maaltijden" fill={chartColors.blue} radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Line
+                dataKey="forecastCount"
+                name="Voorspelling"
+                stroke={chartColors.mutedInk}
+                strokeDasharray="5 3"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
               {report.weightedAverage > 0 && (
                 <ReferenceLine
                   y={report.weightedAverage}
@@ -84,7 +115,7 @@ export function MealsServedChart() {
                   label={{ value: "Doel", position: "insideBottomRight", fontSize: 11, fill: chartColors.mutedInk }}
                 />
               )}
-            </BarChart>
+            </ComposedChart>
           </ResponsiveContainer>
         ) : (
           <p className="flex h-full items-center justify-center text-sm text-slate-500">
@@ -92,6 +123,13 @@ export function MealsServedChart() {
           </p>
         )}
       </div>
+
+      {report && (
+        <DeviationNote
+          items={report.deviations.map((d) => ({ label: bucketLabel(d.date, granularity), actual: d.actual, expected: d.expected }))}
+          unit="maaltijden"
+        />
+      )}
 
       <div className="mt-4 flex flex-wrap items-end gap-6">
         <div>

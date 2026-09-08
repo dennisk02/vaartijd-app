@@ -20,14 +20,15 @@ export default async function AdminRapportagesPage() {
       <div>
         <h1 className="text-xl font-semibold text-red-800">Rapportages</h1>
         <p className="text-sm text-slate-500">
-          Kies per grafiek een periode. De gestippelde lijn &ldquo;Gewogen gem.&rdquo; is automatisch
-          berekend uit de data; &ldquo;Doel&rdquo; is een handmatig in te vullen streefwaarde ter
-          vergelijking.
+          Kies per grafiek een periode, groepering (dag/week/maand/kwartaal) en eventueel een schip. De
+          gestippelde lijn is een eenvoudige trendvoorspelling; &ldquo;Gewogen gem.&rdquo; is automatisch
+          berekend uit de data en &ldquo;Doel&rdquo; is een handmatig in te vullen streefwaarde ter
+          vergelijking. Punten die duidelijk van de trend afwijken staan onder de grafiek genoemd.
         </p>
       </div>
       <HoursReportChart ships={ships} />
-      <OccupancyReportChart />
-      <MealsServedChart />
+      <OccupancyReportChart ships={ships} />
+      <MealsServedChart ships={ships} />
 
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">

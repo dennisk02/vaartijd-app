@@ -3,9 +3,10 @@
 import { useEffect, useState, useTransition } from "react";
 import {
   Bar,
-  BarChart,
+  ComposedChart,
   CartesianGrid,
   Legend,
+  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -13,46 +14,67 @@ import {
   YAxis,
 } from "recharts";
 import { getOccupancyReport } from "@/lib/actions/reports";
-import type { ReportPeriod } from "@/lib/reports";
+import { bucketLabel, type ReportPeriod, type Granularity } from "@/lib/reports";
 import { Card, Field, Input } from "@/components/ui";
 import { PeriodSelect } from "./period-select";
+import { ShipSelect } from "./ship-select";
+import { GranularitySelect } from "./granularity-select";
 import { ChartTooltip } from "./chart-tooltip";
+import { DeviationNote } from "./deviation-note";
 import { chartColors } from "./palette";
 
 type OccupancyReport = Awaited<ReturnType<typeof getOccupancyReport>>;
 
-export function OccupancyReportChart() {
+export function OccupancyReportChart({ ships }: { ships: { id: string; name: string }[] }) {
   const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
+  const [shipId, setShipId] = useState("");
+  const [granularity, setGranularity] = useState<Granularity>("DAY");
   const [report, setReport] = useState<OccupancyReport | null>(null);
   const [target, setTarget] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await getOccupancyReport(period);
+      const result = await getOccupancyReport(period, shipId || null, granularity);
       setReport(result);
     });
-  }, [period]);
+  }, [period, shipId, granularity]);
 
   const targetValue = target === "" ? null : Number(target);
+
+  const chartData: { date: string; dag: number | null; nacht: number | null; forecastTotaal: number | null }[] = report
+    ? [
+        ...report.data.map((d) => ({ date: d.date, dag: d.dag, nacht: d.nacht, forecastTotaal: null })),
+        ...report.forecast.map((f) => ({ date: f.date, dag: null, nacht: null, forecastTotaal: f.totaal })),
+      ]
+    : [];
+  if (report && report.data.length > 0 && report.forecast.length > 0) {
+    const last = report.data[report.data.length - 1];
+    chartData[report.data.length - 1].forecastTotaal = last.dag + last.nacht;
+  }
 
   return (
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-medium text-slate-800">Scheepsbezetting per dag</h2>
-          <p className="text-sm text-slate-500">Aantal personen aan boord, dag en nacht apart.</p>
+          <p className="text-sm text-slate-500">Aantal personen aan boord, dag en nacht apart, met trendvoorspelling op het totaal.</p>
         </div>
-        <PeriodSelect value={period} onChange={setPeriod} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
+          <GranularitySelect value={granularity} onChange={setGranularity} />
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       <div className="h-64 w-full" style={{ opacity: isPending ? 0.5 : 1 }}>
         {report && report.data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={report.data}>
+            <ComposedChart data={chartData}>
               <CartesianGrid vertical={false} stroke={chartColors.gridline} />
               <XAxis
                 dataKey="date"
+                tickFormatter={(v) => bucketLabel(v, granularity)}
                 tick={{ fontSize: 11, fill: chartColors.mutedInk }}
                 axisLine={{ stroke: chartColors.baseline }}
                 tickLine={false}
@@ -64,6 +86,7 @@ export function OccupancyReportChart() {
                 width={32}
               />
               <Tooltip
+                labelFormatter={(v) => bucketLabel(String(v), granularity)}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content={(props: any) => <ChartTooltip {...props} formatValue={(v) => `${v} personen`} />}
                 cursor={{ fill: chartColors.gridline, opacity: 0.4 }}
@@ -71,6 +94,15 @@ export function OccupancyReportChart() {
               <Legend wrapperStyle={{ fontSize: 12, color: chartColors.secondaryInk }} iconType="line" iconSize={12} />
               <Bar dataKey="dag" name="Dag" fill={chartColors.blue} radius={[4, 4, 0, 0]} maxBarSize={20} />
               <Bar dataKey="nacht" name="Nacht" fill={chartColors.aqua} radius={[4, 4, 0, 0]} maxBarSize={20} />
+              <Line
+                dataKey="forecastTotaal"
+                name="Voorspelling (totaal)"
+                stroke={chartColors.mutedInk}
+                strokeDasharray="5 3"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
               {report.weightedAverage > 0 && (
                 <ReferenceLine
                   y={report.weightedAverage}
@@ -87,7 +119,7 @@ export function OccupancyReportChart() {
                   label={{ value: "Doel", position: "insideBottomRight", fontSize: 11, fill: chartColors.mutedInk }}
                 />
               )}
-            </BarChart>
+            </ComposedChart>
           </ResponsiveContainer>
         ) : (
           <p className="flex h-full items-center justify-center text-sm text-slate-500">
@@ -95,6 +127,13 @@ export function OccupancyReportChart() {
           </p>
         )}
       </div>
+
+      {report && (
+        <DeviationNote
+          items={report.deviations.map((d) => ({ label: bucketLabel(d.date, granularity), actual: d.actual, expected: d.expected }))}
+          unit="personen"
+        />
+      )}
 
       <div className="mt-4 flex flex-wrap items-end gap-6">
         <div>

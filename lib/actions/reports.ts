@@ -2,18 +2,26 @@
 
 import { requireAdminScope } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { getPeriodRange, type ReportPeriod } from "@/lib/reports";
+import { getPeriodRange, bucketKey, bucketRangeKeys, nextBucketKeys, type ReportPeriod, type Granularity } from "@/lib/reports";
+import { analyzeTrend, type TrendAnalysis } from "@/lib/trend";
+
+const FORECAST_BUCKETS = 4;
+
+function deviationBuckets(keys: string[], deviations: TrendAnalysis["deviations"]) {
+  return deviations.map((d) => ({ key: keys[d.index], actual: Math.round(d.actual * 10) / 10, expected: Math.round(d.expected * 10) / 10 }));
+}
 
 /**
- * Uren per project, per dag, over de gekozen periode. Optioneel gefilterd op
- * één schip (`shipId`) -- `undefined`/`null` betekent alle schepen (en
- * kantoor-/niet-scheepsgebonden uren, want TimeEntry.shipId is nullable).
- * "Gewogen gemiddelde" = totaal aantal uren / aantal dagen waarop
- * daadwerkelijk uren zijn geregistreerd (niet gedeeld door alle
- * kalenderdagen, anders zou een periode met veel niet-werkdagen het
- * gemiddelde kunstmatig verlagen).
+ * Uren, gegroepeerd per gekozen granulariteit (dag/week/maand/kwartaal),
+ * over de gekozen periode. Optioneel gefilterd op één schip (`shipId`) --
+ * `undefined`/`null` betekent alle schepen (en kantoor-/niet-scheeps-
+ * gebonden uren, want TimeEntry.shipId is nullable). "Gewogen gemiddelde" =
+ * totaal aantal uren / aantal buckets met daadwerkelijk geregistreerde uren.
+ * Bevat ook een eenvoudige lineaire trendvoorspelling voor de komende
+ * periode en een lijst van buckets die significant van die trend afwijken
+ * (zie lib/trend.ts).
  */
-export async function getHoursReport(period: ReportPeriod, shipId?: string | null) {
+export async function getHoursReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
   await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
@@ -22,88 +30,124 @@ export async function getHoursReport(period: ReportPeriod, shipId?: string | nul
     select: { date: true, hours: true },
   });
 
-  const byDate = new Map<string, number>();
+  const byBucket = new Map<string, number>();
   let totalHours = 0;
+  let bucketsWithEntries = 0;
   for (const entry of entries) {
-    const key = entry.date.toISOString().slice(0, 10);
+    const key = bucketKey(entry.date, granularity);
     const hours = Number(entry.hours);
-    byDate.set(key, (byDate.get(key) ?? 0) + hours);
+    if (!byBucket.has(key)) bucketsWithEntries++;
+    byBucket.set(key, (byBucket.get(key) ?? 0) + hours);
     totalHours += hours;
   }
 
-  const data = Array.from(byDate.entries())
-    .map(([date, hours]) => ({ date, hours: Math.round(hours * 100) / 100 }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const keys = bucketRangeKeys(start, end, granularity);
+  const values = keys.map((k) => Math.round((byBucket.get(k) ?? 0) * 100) / 100);
+  const data = keys.map((date, i) => ({ date, hours: values[i] }));
 
-  const weightedAverage = data.length > 0 ? totalHours / data.length : 0;
+  const weightedAverage = bucketsWithEntries > 0 ? totalHours / bucketsWithEntries : 0;
+  const { forecast, deviations } = analyzeTrend(values, FORECAST_BUCKETS);
+  const forecastKeys = keys.length > 0 ? nextBucketKeys(keys[keys.length - 1], FORECAST_BUCKETS, granularity) : [];
 
-  return { data, totalHours, weightedAverage, unit: "uur" as const };
+  return {
+    data,
+    totalHours,
+    weightedAverage,
+    unit: "uur" as const,
+    forecast: forecastKeys.map((date, i) => ({ date, hours: Math.round(forecast[i] * 10) / 10 })),
+    deviations: deviationBuckets(keys, deviations).map((d) => ({ date: d.key, actual: d.actual, expected: d.expected })),
+  };
 }
 
 /**
- * Scheepsbezetting per dag (dag + nacht apart), over de gekozen periode.
- * Bezetting = passagiers + bemanning per registratie.
- * "Gewogen gemiddelde" = totaal aantal geregistreerde personen / aantal
- * registraties (elke dag/nacht-registratie telt naar rato mee, in plaats
- * van een gemiddelde van dag-totalen die zelf al een optelling zijn).
+ * Scheepsbezetting, gegroepeerd per gekozen granulariteit (dag + nacht
+ * apart, opgeteld binnen elke bucket). Optioneel gefilterd op één schip.
+ * Bezetting = passagiers + bemanning per registratie. "Gewogen gemiddelde"
+ * = totaal aantal geregistreerde personen / aantal registraties. Trend/
+ * afwijkingen op het bucket-totaal (dag + nacht samen).
  */
-export async function getOccupancyReport(period: ReportPeriod) {
+export async function getOccupancyReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
   await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
   const records = await prisma.shipOccupancy.findMany({
-    where: { date: { gte: start, lt: end } },
+    where: { date: { gte: start, lt: end }, ...(shipId ? { shipId } : {}) },
     select: { date: true, dayPart: true, passengerCount: true, crewCount: true },
   });
 
-  const byDate = new Map<string, { date: string; dag: number; nacht: number }>();
+  const byBucket = new Map<string, { dag: number; nacht: number }>();
   let totalPersons = 0;
 
   for (const record of records) {
-    const key = record.date.toISOString().slice(0, 10);
-    const bucket = byDate.get(key) ?? { date: key, dag: 0, nacht: 0 };
+    const key = bucketKey(record.date, granularity);
+    const bucket = byBucket.get(key) ?? { dag: 0, nacht: 0 };
     const total = record.passengerCount + record.crewCount;
     if (record.dayPart === "DAY") bucket.dag += total;
     else bucket.nacht += total;
-    byDate.set(key, bucket);
+    byBucket.set(key, bucket);
     totalPersons += total;
   }
 
-  const data = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
-  const weightedAverage = records.length > 0 ? totalPersons / records.length : 0;
+  const keys = bucketRangeKeys(start, end, granularity);
+  const data = keys.map((date) => {
+    const bucket = byBucket.get(date) ?? { dag: 0, nacht: 0 };
+    return { date, dag: bucket.dag, nacht: bucket.nacht };
+  });
+  const totals = data.map((d) => d.dag + d.nacht);
 
-  return { data, weightedAverage, unit: "personen" as const };
+  const weightedAverage = records.length > 0 ? totalPersons / records.length : 0;
+  const { forecast, deviations } = analyzeTrend(totals, FORECAST_BUCKETS);
+  const forecastKeys = keys.length > 0 ? nextBucketKeys(keys[keys.length - 1], FORECAST_BUCKETS, granularity) : [];
+
+  return {
+    data,
+    weightedAverage,
+    unit: "personen" as const,
+    forecast: forecastKeys.map((date, i) => ({ date, totaal: Math.round(forecast[i]) })),
+    deviations: deviationBuckets(keys, deviations).map((d) => ({ date: d.key, actual: d.actual, expected: d.expected })),
+  };
 }
 
 /**
- * Aantal geserveerde maaltijden per dag, over de gekozen periode.
- * "Gewogen gemiddelde" = totaal aantal maaltijden / aantal dagen met
- * registraties.
+ * Aantal geserveerde maaltijden, gegroepeerd per gekozen granulariteit.
+ * Optioneel gefilterd op één schip. "Gewogen gemiddelde" = totaal aantal
+ * maaltijden / aantal buckets met registraties.
  */
-export async function getMealsServedReport(period: ReportPeriod) {
+export async function getMealsServedReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
   await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
   const records = await prisma.mealCount.findMany({
-    where: { date: { gte: start, lt: end } },
+    where: { date: { gte: start, lt: end }, ...(shipId ? { shipId } : {}) },
     select: { date: true, countServed: true },
   });
 
-  const byDate = new Map<string, number>();
+  const byBucket = new Map<string, number>();
   let totalServed = 0;
+  let bucketsWithEntries = 0;
   for (const record of records) {
-    const key = record.date.toISOString().slice(0, 10);
-    byDate.set(key, (byDate.get(key) ?? 0) + record.countServed);
+    const key = bucketKey(record.date, granularity);
+    if (!byBucket.has(key)) bucketsWithEntries++;
+    byBucket.set(key, (byBucket.get(key) ?? 0) + record.countServed);
     totalServed += record.countServed;
   }
 
-  const data = Array.from(byDate.entries())
-    .map(([date, count]) => ({ date, count }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const keys = bucketRangeKeys(start, end, granularity);
+  const values = keys.map((k) => byBucket.get(k) ?? 0);
+  const data = keys.map((date, i) => ({ date, count: values[i] }));
 
-  const weightedAverage = data.length > 0 ? totalServed / data.length : 0;
+  const weightedAverage = bucketsWithEntries > 0 ? totalServed / bucketsWithEntries : 0;
+  const { forecast, deviations } = analyzeTrend(values, FORECAST_BUCKETS);
+  const forecastKeys = keys.length > 0 ? nextBucketKeys(keys[keys.length - 1], FORECAST_BUCKETS, granularity) : [];
 
-  return { data, totalServed, weightedAverage, unit: "maaltijden" as const };
+  return {
+    data,
+    totalServed,
+    weightedAverage,
+    unit: "maaltijden" as const,
+    forecast: forecastKeys.map((date, i) => ({ date, count: Math.round(forecast[i]) })),
+    deviations: deviationBuckets(keys, deviations).map((d) => ({ date: d.key, actual: d.actual, expected: d.expected })),
+  };
 }
 
 // Voedselverspilling heeft sinds de uitbreiding naar 4 velden per maaltijd

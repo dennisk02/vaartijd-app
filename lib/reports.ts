@@ -37,3 +37,114 @@ export function getPeriodRange(period: ReportPeriod): { start: Date; end: Date }
     }
   }
 }
+
+/**
+ * Groeperingsniveau voor de "per dag"-rapportages (§ n.a.v. "ook per week/
+ * maand/kwartaal"-verzoek, sep 2026) -- los van ReportPeriod, dat bepaalt
+ * hoe ver terug in de tijd; dit bepaalt hoe de punten binnen die periode
+ * gebundeld worden.
+ */
+export type Granularity = "DAY" | "WEEK" | "MONTH" | "QUARTER";
+
+export const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
+  { value: "DAY", label: "Per dag" },
+  { value: "WEEK", label: "Per week" },
+  { value: "MONTH", label: "Per maand" },
+  { value: "QUARTER", label: "Per kwartaal" },
+];
+
+function startOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 = zondag
+  const diff = (day === 0 ? -6 : 1) - day; // naar de maandag van deze week
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+/** Sleutel voor de bucket waar `date` in valt -- chronologisch sorteerbaar
+ * als platte string voor elk granulariteitsniveau. */
+export function bucketKey(date: Date, granularity: Granularity): string {
+  switch (granularity) {
+    case "DAY":
+      return date.toISOString().slice(0, 10);
+    case "WEEK":
+      return startOfWeek(date).toISOString().slice(0, 10);
+    case "MONTH":
+      return date.toISOString().slice(0, 7);
+    case "QUARTER": {
+      const q = Math.floor(date.getMonth() / 3) + 1;
+      return `${date.getFullYear()}-Q${q}`;
+    }
+  }
+}
+
+/** Leesbaar label voor een bucket-sleutel, voor op de X-as/in lijsten. */
+export function bucketLabel(key: string, granularity: Granularity): string {
+  if (granularity === "WEEK") {
+    const d = new Date(key);
+    return `Week van ${d.toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}`;
+  }
+  return key;
+}
+
+/** Alle bucket-sleutels tussen `start` (incl.) en `end` (excl.), aaneen-
+ * gesloten en zonder gaten -- nodig zodat de trend/forecast-berekening
+ * (lib/trend.ts) tegen gelijk verdeelde tijdstappen rekent i.p.v. alleen
+ * tegen buckets mét registraties. */
+export function bucketRangeKeys(start: Date, end: Date, granularity: Granularity): string[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  const cursor = new Date(start);
+  while (cursor < end) {
+    const key = bucketKey(cursor, granularity);
+    if (!seen.has(key)) {
+      seen.add(key);
+      keys.push(key);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys;
+}
+
+/** Genereert `count` toekomstige bucket-sleutels na `lastKey`, voor de
+ * forecast-reeks (zelfde granulariteit als de historische data). */
+export function nextBucketKeys(lastKey: string, count: number, granularity: Granularity): string[] {
+  switch (granularity) {
+    case "DAY": {
+      const last = new Date(lastKey);
+      return Array.from({ length: count }, (_, i) => {
+        const d = new Date(last);
+        d.setDate(d.getDate() + i + 1);
+        return d.toISOString().slice(0, 10);
+      });
+    }
+    case "WEEK": {
+      const last = new Date(lastKey);
+      return Array.from({ length: count }, (_, i) => {
+        const d = new Date(last);
+        d.setDate(d.getDate() + (i + 1) * 7);
+        return d.toISOString().slice(0, 10);
+      });
+    }
+    case "MONTH": {
+      const [year, month] = lastKey.split("-").map(Number);
+      return Array.from({ length: count }, (_, i) => {
+        const d = new Date(year, month - 1 + i + 1, 1);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      });
+    }
+    case "QUARTER": {
+      const [yearStr, qStr] = lastKey.split("-Q");
+      let year = Number(yearStr);
+      let quarter = Number(qStr);
+      return Array.from({ length: count }, () => {
+        quarter++;
+        if (quarter > 4) {
+          quarter = 1;
+          year++;
+        }
+        return `${year}-Q${quarter}`;
+      });
+    }
+  }
+}
