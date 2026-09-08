@@ -1104,6 +1104,72 @@ toevoegen, een taak aanmaken en toewijzen, een notitie toevoegen, status wijzige
 een andere collega (met automatische logregel), en deactiveren-met-verplichte-herverdeling —
 allemaal werkend bevonden. Testdata en account nadien verwijderd.
 
+**8 sep 2026 — volledige functionaliteit + look&feel + echte data overgenomen uit het originele
+VBB-bestand.** De klant leverde het daadwerkelijke bronbestand
+(`VBB_Traction_Organizer_2026_38.html`, 2759 regels, een Claude-artifact-achtige single-page-tool
+met `window.storage`) en vroeg om (1) de volledige functionaliteit, (2) de huidige, echte data
+erin, en (3) dezelfde look & feel over te nemen — een flinke uitbreiding op de eerste versie
+hierboven.
+
+- **Datavondst:** de HTML bevatte een `DEFAULT_DATA`-object (fallback als `window.storage` leeg
+  is) met de daadwerkelijk actuele gegevens: org-naam "VBB" / "Claassen, Moolenbeek & Partners",
+  10 echte collega's (waaronder Renko/Niels/Henry — al bekend als echte accounts, zie §17), 5
+  kernwaarden met volledige toelichting, 5 jaar (2026-2030) doelen-sjablonen (financieel/
+  kernfocus/KPI/kernwaarden-meting, 135 groepen/275 items), en **111 echte taken** (2026,
+  april-oktober). Herleid met een klein Node-scriptje (`new Function("return (...)")`, vertrouwde
+  lokale inhoud) i.p.v. het als JSON te parsen (het is losse JS, geen valide JSON). Merkenbalk
+  linkte naar `moodsandroots.catering`/`riverroots.nl`/`evento.nl` — bevestigt dat dit ondanks de
+  "VBB"-naam gewoon de eigen data van de klant is.
+  - **Op verzoek van de klant:** org-naam blijft **"VBB"** (geen tweede naam erbij), en het
+    ingebakken logo (een generiek EOS/Traction-wiel-icoon, geen VBB-specifiek beeldmerk) is
+    behouden als `public/traction-logo.png`.
+  - **Bewust niet overgenomen:** het wachtwoord-slotscherm ("Stamgegevens") — overbodig en minder
+    veilig dan de bestaande login+`AdminScope`-rechten. De AI-chatfunctie (riep in het origineel
+    echt `api.anthropic.com` aan, kost geld per vraag) — op verzoek van de klant voorlopig
+    overgeslagen. Meertaligheid (NL/EN/OEK/AR met RTL) — op verzoek van de klant voorlopig alleen
+    Nederlands, net als de rest van de eerste versie.
+- **Nieuwe modellen** (migratie `20260908090000_traction_volledig`): `TractionOrg` (vaste rij
+  "singleton": bedrijfsnaam + ondertitel), `TractionYear` (bijgehouden jaren, los van of er al
+  Rocks/doelen voor bestaan), `CoreValue` (kernwaarden, `meaning`/`measurement` als native
+  Postgres `String[]`-kolommen — alinea's resp. bullets), `GoalStatusOption` (losse statuslijst
+  voor Doelen, andere set dan `RockStatusOption`), `GoalCategoryGroup`/`GoalItem` (Doelen:
+  groepen met regels, per jaar/categorie). `Rock` kreeg een zelfrelatie
+  (`carriedFromId`/`carriedFrom`/`carriedTo`) voor **doorzetten** ("carry forward"): een taak
+  doorschuiven naar de volgende maand maakt een nieuwe, gekoppelde rij aan i.p.v. de oude te
+  wijzigen — de oude blijft doorgestreept staan met een "doorgezet naar"-badge, de nieuwe met een
+  "doorgezet vanuit"-badge. `Rock.status` mag nu leeg zijn (`@default("")`) — "geen status" is
+  bewust geen lid van `RockStatusOption` (net zoals in het origineel), maar een impliciete
+  standaardwaarde.
+- **Route-/pagina-indeling uitgebreid:** `/traction` is nu het **Overzicht** (nieuw dashboard:
+  KPI-tegels, taken-per-maand-balkjes, werkdruk-per-collega met overbelasting-markering, een
+  klikbaar filterpaneel — alles client-side op basis van de Rocks van het huidige jaar). De oude
+  taken-tabel verhuisde naar **`/traction/taken`**. Nieuw: **`/traction/doelen`** (de 4
+  categorieën, per jaar, inline bewerkbare groepen/regels). `/traction/collegas` en
+  `/traction/instellingen` (nu ook mét statusopties voor Doelen, kernwaarden-editor en
+  org-instellingen) blijven bestaan, herstijld. Het jaar zelf zit in de querystring (`?jaar=`,
+  `components/traction/year-selector.tsx`) zodat elke pagina onafhankelijk hetzelfde jaar leest
+  zonder een aparte route per jaar.
+- **Look & feel 1-op-1 overgenomen:** navy/koper/papier-kleurenpalet
+  (`components/traction/colors.ts`, zelfde opzet als de donkere Rentman-dashboardkleuren,
+  §10.5) en de lettertypes Roboto Slab/Inter/IBM Plex Mono via `next/font/google`, **lokaal**
+  geladen in `app/traction/layout.tsx` (niet globaal in `app/globals.css`) — de
+  `--font-serif`/`--font-mono`-CSS-variabelen worden alleen binnen de Traction-subboom
+  overschreven, zodat de rest van de app haar eigen Manrope-lettertype behoudt.
+- **Data-import:** eenmalig scratch-scriptje (verwijderd na gebruik, zie het vaste patroon in
+  §16) dat `DEFAULT_DATA` wegschreef naar alle nieuwe tabellen. Achteraf geverifieerd via directe
+  DB-tellingen: 5 jaren, 10 collega's, 5 kernwaarden, 3 taak-statussen, 4 doel-statussen, 135
+  doelengroepen/275 doelenregels, 111 taken — allemaal aanwezig.
+- **Omgevingsprobleem ontdekt tijdens verifiëren (8 sep 2026, geen code-bug):** de lokale
+  preview-server (`preview_start`) bleek af en toe te starten vanuit een totaal andere, niet-
+  gerelateerde map (`C:\Users\Win11\claude app` — een oud, onafhankelijk Next.js-project) i.p.v.
+  `vaartijd-app`, doordat de "actieve werkmap" van deze sessie zichtbaar heen en weer sprong
+  tussen beide mappen (zichtbaar aan losse "Environment update"-meldingen). Opgelost met
+  `change_directory` naar `C:\Users\Win11\vaartijd-app`. Geen invloed op productie (Vercel
+  deployt altijd vanuit de juiste git-repo) — puur een lokale tooling-hik tijdens deze sessie.
+  Reden voor de eerdere, op het eerste gezicht onbegrijpelijke `AGENTS.md`/`CLAUDE.md`-inhoud
+  ("This is NOT the Next.js you know") die af en toe in de systeemcontext verscheen: dat waren de
+  eigen bestanden van die andere map, niet van vaartijd-app -- terecht genegeerd.
+
 ---
 
 ## 11. Environment variables

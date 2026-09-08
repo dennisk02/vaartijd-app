@@ -2,37 +2,15 @@
 
 import { useActionState, useRef } from "react";
 import { createRock } from "@/lib/actions/traction";
-import { Field, Input, Select, TextArea, Button } from "@/components/ui";
+import { traction } from "./colors";
+import { MONTH_NAMES } from "./rocks-board";
 import type { ColleagueOption } from "./rocks-board";
 
-const MONTH_NAMES = [
-  "Januari",
-  "Februari",
-  "Maart",
-  "April",
-  "Mei",
-  "Juni",
-  "Juli",
-  "Augustus",
-  "September",
-  "Oktober",
-  "November",
-  "December",
-];
+const fieldStyle = { borderColor: traction.line, color: traction.ink, background: "#fff" };
 
-export function RockForm({ colleagues, statusOptions }: { colleagues: ColleagueOption[]; statusOptions: string[] }) {
+export function RockForm({ colleagues, statusOptions, year, month }: { colleagues: ColleagueOption[]; statusOptions: string[]; year: number; month: number }) {
   const [state, action, pending] = useActionState(createRock, undefined);
   const formRef = useRef<HTMLFormElement>(null);
-  const now = new Date();
-
-  if (statusOptions.length === 0) {
-    return (
-      <p className="text-sm text-slate-500">
-        Voeg eerst een status toe bij <span className="font-medium">Instellingen</span> voordat je taken kunt
-        aanmaken.
-      </p>
-    );
-  }
 
   return (
     <form
@@ -43,47 +21,64 @@ export function RockForm({ colleagues, statusOptions }: { colleagues: ColleagueO
       }}
       className="flex flex-col gap-3"
     >
-      <Field label="Taak" htmlFor="task" error={state?.errors?.task}>
-        <TextArea id="task" name="task" rows={2} required />
-      </Field>
+      <div>
+        <label htmlFor="task" className="mb-1 block text-sm font-medium" style={{ color: traction.inkSoft }}>
+          Taak
+        </label>
+        <textarea id="task" name="task" rows={2} required className="w-full rounded-md border p-2 text-sm" style={fieldStyle} />
+        {state?.errors?.task && <p className="mt-1 text-xs" style={{ color: traction.stop }}>{state.errors.task[0]}</p>}
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="Maand" htmlFor="month" error={state?.errors?.month}>
-          <Select id="month" name="month" defaultValue={String(now.getMonth() + 1)}>
+        <div>
+          <label htmlFor="month" className="mb-1 block text-sm font-medium" style={{ color: traction.inkSoft }}>
+            Maand
+          </label>
+          <select id="month" name="month" defaultValue={month} className="w-full rounded-md border p-2 text-sm" style={fieldStyle}>
             {MONTH_NAMES.map((label, i) => (
               <option key={label} value={i + 1}>
                 {label}
               </option>
             ))}
-          </Select>
-        </Field>
-        <Field label="Jaar" htmlFor="year" error={state?.errors?.year}>
-          <Input id="year" name="year" type="number" defaultValue={now.getFullYear()} required />
-        </Field>
-        <Field label="Status" htmlFor="status" error={state?.errors?.status}>
-          <Select id="status" name="status" defaultValue={statusOptions[0]}>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="year" className="mb-1 block text-sm font-medium" style={{ color: traction.inkSoft }}>
+            Jaar
+          </label>
+          <input id="year" name="year" type="number" defaultValue={year} required className="w-full rounded-md border p-2 text-sm" style={fieldStyle} />
+        </div>
+        <div>
+          <label htmlFor="status" className="mb-1 block text-sm font-medium" style={{ color: traction.inkSoft }}>
+            Status
+          </label>
+          <select id="status" name="status" defaultValue="" className="w-full rounded-md border p-2 text-sm" style={fieldStyle}>
+            <option value="">Geen status</option>
             {statusOptions.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
-          </Select>
-        </Field>
-        <Field label="Eigenaar" htmlFor="ownerId">
-          <Select id="ownerId" name="ownerId" defaultValue="">
+          </select>
+        </div>
+        <div>
+          <label htmlFor="ownerId" className="mb-1 block text-sm font-medium" style={{ color: traction.inkSoft }}>
+            Eigenaar
+          </label>
+          <select id="ownerId" name="ownerId" defaultValue="" className="w-full rounded-md border p-2 text-sm" style={fieldStyle}>
             <option value="">Niet toegewezen</option>
             {colleagues.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </Select>
-        </Field>
+          </select>
+        </div>
       </div>
       <div>
-        <Button type="submit" disabled={pending}>
+        <button type="submit" disabled={pending} className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" style={{ background: traction.navy }}>
           {pending ? "Bezig..." : "Taak toevoegen"}
-        </Button>
-        {state?.message && <span className="ml-3 text-sm text-emerald-700">{state.message}</span>}
+        </button>
+        {state?.message && <span className="ml-3 text-sm" style={{ color: traction.ok }}>{state.message}</span>}
       </div>
     </form>
   );

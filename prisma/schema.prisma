@@ -570,7 +570,9 @@ model RockStatusOption {
 }
 
 /// Eén taak ("rock"), per maand/jaar. `ownerId` mag leeg zijn (nog niet
-/// toegewezen).
+/// toegewezen). `status` mag leeg zijn ("nog geen status") -- dat is bewust
+/// geen lid van RockStatusOption (die lijst is voor de actief te kiezen
+/// statussen), zie het origineel dat dit ook zo deed.
 model Rock {
   id        String       @id @default(cuid())
   year      Int
@@ -578,10 +580,18 @@ model Rock {
   task      String
   ownerId   String?
   owner     Colleague?   @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  status    String
+  status    String       @default("")
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
   updates   RockUpdate[]
+
+  /// Doorzetten ("carry forward", §10.9): een taak die niet af is naar de
+  /// volgende maand doorschuiven maakt een NIEUWE rij aan die hierheen
+  /// terugwijst (`carriedFromId`); de oorspronkelijke rij blijft bestaan
+  /// (doorgestreept getoond) zodat de geschiedenis intact blijft.
+  carriedFromId String? @unique
+  carriedFrom   Rock?   @relation("RockCarry", fields: [carriedFromId], references: [id], onDelete: SetNull)
+  carriedTo     Rock?   @relation("RockCarry")
 
   @@index([year, month])
   @@index([ownerId])
@@ -600,5 +610,69 @@ model RockUpdate {
   createdAt DateTime @default(now())
 
   @@index([rockId])
+}
+
+/// Vaste rij (id "singleton") met de organisatie-instellingen bovenin
+/// Traction -- bedrijfsnaam + ondertitel. Het logo zelf is een statisch
+/// bestand (`public/traction-logo.png`), geen databaseveld.
+model TractionOrg {
+  id      String @id @default("singleton")
+  company String @default("")
+  tagline String @default("")
+}
+
+/// Bijgehouden jaren (§10.9, "jaar toevoegen"-knop in het origineel) --
+/// los van of er al Rocks/doelen voor bestaan, zodat een net toegevoegd
+/// jaar meteen in de jaarkiezer verschijnt.
+model TractionYear {
+  year Int @id
+}
+
+/// Eén kernwaarde, met de uitklapbare toelichting ("betekenis"/"hoe meten we
+/// dit") als tekstparagrafen resp. bullets -- native Postgres-array, geen
+/// aparte tabel nodig voor deze eenvoudige, zelden gewijzigde lijstjes.
+model CoreValue {
+  id          String   @id @default(cuid())
+  label       String
+  meaning     String[]
+  measurement String[]
+  order       Int      @default(0)
+}
+
+/// Configureerbare statusopties voor Doelen-items (bv. "Gereed"/"Niet
+/// behaald") -- los van RockStatusOption, want Doelen en Rocks hebben een
+/// andere set statussen.
+model GoalStatusOption {
+  id    String @id @default(cuid())
+  label String @unique
+  order Int    @default(0)
+}
+
+/// Eén groep binnen een Doelen-categorie voor een specifiek jaar (bv.
+/// "Omzet" binnen categorie "financial"). `category` is een van
+/// financial/core_focus/kpi/core_values_measurement (bewust een vrij
+/// tekstveld i.p.v. een Prisma-enum, zelfde afweging als RockStatusOption).
+model GoalCategoryGroup {
+  id       String     @id @default(cuid())
+  year     Int
+  category String
+  title    String
+  order    Int        @default(0)
+  items    GoalItem[]
+
+  @@index([year, category])
+}
+
+/// Eén regel binnen een Doelen-groep: omschrijving, target-waarde, status.
+model GoalItem {
+  id      String            @id @default(cuid())
+  groupId String
+  group   GoalCategoryGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  label   String
+  target  String
+  status  String            @default("")
+  order   Int               @default(0)
+
+  @@index([groupId])
 }
 
