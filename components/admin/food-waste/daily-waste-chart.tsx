@@ -8,6 +8,7 @@ import { Card } from "@/components/ui";
 import { PeriodSelect } from "@/components/admin/reports/period-select";
 import { ShipSelect } from "@/components/admin/reports/ship-select";
 import { GranularitySelect } from "@/components/admin/reports/granularity-select";
+import { WeekdaySelect } from "@/components/admin/reports/weekday-select";
 import { ChartTooltip } from "@/components/admin/reports/chart-tooltip";
 import { DeviationNote } from "@/components/admin/reports/deviation-note";
 import { chartColors } from "@/components/admin/reports/palette";
@@ -22,14 +23,15 @@ export function DailyWasteChart({ ships }: { ships: { id: string; name: string }
   const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
   const [shipId, setShipId] = useState("");
   const [granularity, setGranularity] = useState<Granularity>("DAY");
+  const [weekday, setWeekday] = useState<number | null>(null);
   const [report, setReport] = useState<DailyReport | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
-      setReport(await getFoodWasteDailyReport(period, shipId || null, granularity));
+      setReport(await getFoodWasteDailyReport(period, shipId || null, granularity, weekday));
     });
-  }, [period, shipId, granularity]);
+  }, [period, shipId, granularity, weekday]);
 
   return (
     <Card>
@@ -41,6 +43,7 @@ export function DailyWasteChart({ ships }: { ships: { id: string; name: string }
         <div className="flex flex-wrap items-center gap-2">
           <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
           <GranularitySelect value={granularity} onChange={setGranularity} />
+          <WeekdaySelect value={weekday} onChange={setWeekday} />
           <PeriodSelect value={period} onChange={setPeriod} />
         </div>
       </div>

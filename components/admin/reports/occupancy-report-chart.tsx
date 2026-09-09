@@ -8,6 +8,7 @@ import { Card, Field, Input } from "@/components/ui";
 import { PeriodSelect } from "./period-select";
 import { ShipSelect } from "./ship-select";
 import { GranularitySelect } from "./granularity-select";
+import { WeekdaySelect } from "./weekday-select";
 import { ChartTooltip } from "./chart-tooltip";
 import { DeviationNote } from "./deviation-note";
 import { chartColors } from "./palette";
@@ -18,16 +19,17 @@ export function OccupancyReportChart({ ships }: { ships: { id: string; name: str
   const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
   const [shipId, setShipId] = useState("");
   const [granularity, setGranularity] = useState<Granularity>("DAY");
+  const [weekday, setWeekday] = useState<number | null>(null);
   const [report, setReport] = useState<OccupancyReport | null>(null);
   const [target, setTarget] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
-      const result = await getOccupancyReport(period, shipId || null, granularity);
+      const result = await getOccupancyReport(period, shipId || null, granularity, weekday);
       setReport(result);
     });
-  }, [period, shipId, granularity]);
+  }, [period, shipId, granularity, weekday]);
 
   const targetValue = target === "" ? null : Number(target);
 
@@ -41,6 +43,7 @@ export function OccupancyReportChart({ ships }: { ships: { id: string; name: str
         <div className="flex flex-wrap items-center gap-2">
           <ShipSelect ships={ships} value={shipId} onChange={setShipId} />
           <GranularitySelect value={granularity} onChange={setGranularity} />
+          <WeekdaySelect value={weekday} onChange={setWeekday} />
           <PeriodSelect value={period} onChange={setPeriod} />
         </div>
       </div>

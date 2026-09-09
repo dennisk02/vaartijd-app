@@ -7,6 +7,7 @@ import {
   bucketKey,
   bucketRangeKeys,
   trimToDataRange,
+  filterByWeekday,
   type ReportPeriod,
   type Granularity,
 } from "@/lib/reports";
@@ -179,15 +180,22 @@ export type DailyWasteRow = { date: string; foodUsedKg: number; operationalWaste
 /** Voedselverspilling (food used + operationeel afval), gegroepeerd per
  * gekozen granulariteit (dag/week/maand/kwartaal), optioneel per schip --
  * met afwijkingen t.o.v. de lineaire trend, zelfde opzet als de andere
- * rapportages (lib/actions/reports.ts). */
-export async function getFoodWasteDailyReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
+ * rapportages (lib/actions/reports.ts). Optioneel `weekday` (0=zondag..
+ * 6=zaterdag) beperkt tot één dag van de week. */
+export async function getFoodWasteDailyReport(
+  period: ReportPeriod,
+  shipId?: string | null,
+  granularity: Granularity = "DAY",
+  weekday?: number | null
+) {
   await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
-  const rows = await prisma.foodWaste.findMany({
+  const allRows = await prisma.foodWaste.findMany({
     where: { date: { gte: start, lt: end }, ...(shipId ? { shipId } : {}) },
     select: { date: true, foodUsedKg: true, passengerWasteKg: true, kitchenWasteKg: true },
   });
+  const rows = filterByWeekday(allRows, weekday);
 
   const byBucket = new Map<string, { foodUsedKg: number; operationalWasteKg: number }>();
   for (const row of rows) {
@@ -199,7 +207,7 @@ export async function getFoodWasteDailyReport(period: ReportPeriod, shipId?: str
   }
 
   const trimmed = trimToDataRange(rows.map((r) => r.date), start, end);
-  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity) : [];
+  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity, weekday) : [];
   const data: DailyWasteRow[] = keys.map((date) => {
     const bucket = byBucket.get(date) ?? { foodUsedKg: 0, operationalWasteKg: 0 };
     return { date, foodUsedKg: Math.round(bucket.foodUsedKg * 10) / 10, operationalWasteKg: Math.round(bucket.operationalWasteKg * 10) / 10 };

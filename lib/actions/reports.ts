@@ -7,6 +7,7 @@ import {
   bucketKey,
   bucketRangeKeys,
   trimToDataRange,
+  filterByWeekday,
   type ReportPeriod,
   type Granularity,
 } from "@/lib/reports";
@@ -28,16 +29,25 @@ function deviationBuckets(keys: string[], deviations: TrendAnalysis["deviations"
  * anders zou bv. "Dit jaar" met pas sinds juni data maandenlang lege
  * nulwaarden tonen. Bevat een lijst van buckets die significant van de
  * lineaire trend afwijken (lib/trend.ts) -- de voorspellingslijn zelf
- * wordt niet getoond, alleen gebruikt om afwijkingen te herkennen.
+ * wordt niet getoond, alleen gebruikt om afwijkingen te herkennen. Optioneel
+ * `weekday` (0=zondag..6=zaterdag, zie WEEKDAY_OPTIONS) beperkt tot één dag
+ * van de week -- voor "vergelijk dezelfde dag" (bv. alle maandagen van dit
+ * jaar).
  */
-export async function getHoursReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
+export async function getHoursReport(
+  period: ReportPeriod,
+  shipId?: string | null,
+  granularity: Granularity = "DAY",
+  weekday?: number | null
+) {
   await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
-  const entries = await prisma.timeEntry.findMany({
+  const allEntries = await prisma.timeEntry.findMany({
     where: { date: { gte: start, lt: end }, ...(shipId ? { shipId } : {}) },
     select: { date: true, hours: true },
   });
+  const entries = filterByWeekday(allEntries, weekday);
 
   const byBucket = new Map<string, number>();
   let totalHours = 0;
@@ -51,7 +61,7 @@ export async function getHoursReport(period: ReportPeriod, shipId?: string | nul
   }
 
   const trimmed = trimToDataRange(entries.map((e) => e.date), start, end);
-  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity) : [];
+  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity, weekday) : [];
   const values = keys.map((k) => Math.round((byBucket.get(k) ?? 0) * 100) / 100);
   const data = keys.map((date, i) => ({ date, hours: values[i] }));
 
@@ -73,16 +83,23 @@ export async function getHoursReport(period: ReportPeriod, shipId?: string | nul
  * Bezetting = passagiers + bemanning per registratie. "Gewogen gemiddelde"
  * = totaal aantal geregistreerde personen / aantal registraties. Afwijkingen
  * op het bucket-totaal (dag + nacht samen). Toont alleen het bereik met
- * daadwerkelijk data (zie getHoursReport hierboven).
+ * daadwerkelijk data (zie getHoursReport hierboven). Optioneel `weekday`
+ * (0=zondag..6=zaterdag) beperkt tot één dag van de week.
  */
-export async function getOccupancyReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
+export async function getOccupancyReport(
+  period: ReportPeriod,
+  shipId?: string | null,
+  granularity: Granularity = "DAY",
+  weekday?: number | null
+) {
   await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
-  const records = await prisma.shipOccupancy.findMany({
+  const allRecords = await prisma.shipOccupancy.findMany({
     where: { date: { gte: start, lt: end }, ...(shipId ? { shipId } : {}) },
     select: { date: true, dayPart: true, passengerCount: true, crewCount: true },
   });
+  const records = filterByWeekday(allRecords, weekday);
 
   const byBucket = new Map<string, { dag: number; nacht: number }>();
   let totalPersons = 0;
@@ -98,7 +115,7 @@ export async function getOccupancyReport(period: ReportPeriod, shipId?: string |
   }
 
   const trimmed = trimToDataRange(records.map((r) => r.date), start, end);
-  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity) : [];
+  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity, weekday) : [];
   const data = keys.map((date) => {
     const bucket = byBucket.get(date) ?? { dag: 0, nacht: 0 };
     return { date, dag: bucket.dag, nacht: bucket.nacht };
@@ -120,16 +137,23 @@ export async function getOccupancyReport(period: ReportPeriod, shipId?: string |
  * Aantal geserveerde maaltijden, gegroepeerd per gekozen granulariteit.
  * Optioneel gefilterd op één schip. "Gewogen gemiddelde" = totaal aantal
  * maaltijden / aantal buckets met registraties. Toont alleen het bereik
- * met daadwerkelijk data (zie getHoursReport hierboven).
+ * met daadwerkelijk data (zie getHoursReport hierboven). Optioneel
+ * `weekday` (0=zondag..6=zaterdag) beperkt tot één dag van de week.
  */
-export async function getMealsServedReport(period: ReportPeriod, shipId?: string | null, granularity: Granularity = "DAY") {
+export async function getMealsServedReport(
+  period: ReportPeriod,
+  shipId?: string | null,
+  granularity: Granularity = "DAY",
+  weekday?: number | null
+) {
   await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
-  const records = await prisma.mealCount.findMany({
+  const allRecords = await prisma.mealCount.findMany({
     where: { date: { gte: start, lt: end }, ...(shipId ? { shipId } : {}) },
     select: { date: true, countServed: true },
   });
+  const records = filterByWeekday(allRecords, weekday);
 
   const byBucket = new Map<string, number>();
   let totalServed = 0;
@@ -142,7 +166,7 @@ export async function getMealsServedReport(period: ReportPeriod, shipId?: string
   }
 
   const trimmed = trimToDataRange(records.map((r) => r.date), start, end);
-  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity) : [];
+  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity, weekday) : [];
   const values = keys.map((k) => byBucket.get(k) ?? 0);
   const data = keys.map((date, i) => ({ date, count: values[i] }));
 

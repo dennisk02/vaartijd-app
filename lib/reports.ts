@@ -1,6 +1,13 @@
-export type ReportPeriod = "LAST_30_DAYS" | "LAST_MONTH" | "THIS_YEAR" | "LAST_YEAR";
+export type CustomPeriod = { custom: true; start: string; end: string };
 
-export const PERIOD_OPTIONS: { value: ReportPeriod; label: string }[] = [
+/** `start`/`end` van CustomPeriod zijn "yyyy-mm-dd"-strings (waarde van een
+ * <input type="date">), `end` inclusief -- zo kan een rapportage-aanroep
+ * gewoon dezelfde `period`-parameter doorgeven als de vaste opties
+ * hieronder, zonder dat elke server-actie/component een apart "aangepast
+ * bereik"-pad nodig heeft. */
+export type ReportPeriod = "LAST_30_DAYS" | "LAST_MONTH" | "THIS_YEAR" | "LAST_YEAR" | CustomPeriod;
+
+export const PERIOD_OPTIONS: { value: Exclude<ReportPeriod, CustomPeriod>; label: string }[] = [
   { value: "LAST_30_DAYS", label: "Afgelopen 30 dagen" },
   { value: "LAST_MONTH", label: "Afgelopen maand" },
   { value: "THIS_YEAR", label: "Dit jaar" },
@@ -9,6 +16,13 @@ export const PERIOD_OPTIONS: { value: ReportPeriod; label: string }[] = [
 
 /** Geeft een [start, end) datumbereik terug -- end is exclusief. */
 export function getPeriodRange(period: ReportPeriod): { start: Date; end: Date } {
+  if (typeof period === "object") {
+    const start = new Date(`${period.start}T00:00:00`);
+    const end = new Date(`${period.end}T00:00:00`);
+    end.setDate(end.getDate() + 1); // `end` is inclusief -- +1 dag voor het exclusieve eind hieronder
+    return { start, end };
+  }
+
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -90,20 +104,48 @@ export function bucketLabel(key: string, granularity: Granularity): string {
 /** Alle bucket-sleutels tussen `start` (incl.) en `end` (excl.), aaneen-
  * gesloten en zonder gaten -- nodig zodat de trend/forecast-berekening
  * (lib/trend.ts) tegen gelijk verdeelde tijdstappen rekent i.p.v. alleen
- * tegen buckets mét registraties. */
-export function bucketRangeKeys(start: Date, end: Date, granularity: Granularity): string[] {
+ * tegen buckets mét registraties. Optioneel `weekday` (0=zondag..6=zaterdag,
+ * zie `WEEKDAY_OPTIONS`) beperkt tot dagen die op die weekdag vallen -- voor
+ * "vergelijk dezelfde dag van de week" (bv. alle maandagen van dit jaar).
+ * Bij WEEK-granulariteit heeft dit geen effect (elke week heeft toch maar
+ * één maandag); bij MONTH/QUARTER telt het de waarden van alleen die
+ * weekdag per bucket op, dus "totaal op maandagen per maand". */
+export function bucketRangeKeys(start: Date, end: Date, granularity: Granularity, weekday?: number | null): string[] {
   const keys: string[] = [];
   const seen = new Set<string>();
   const cursor = new Date(start);
   while (cursor < end) {
-    const key = bucketKey(cursor, granularity);
-    if (!seen.has(key)) {
-      seen.add(key);
-      keys.push(key);
+    if (weekday === undefined || weekday === null || cursor.getDay() === weekday) {
+      const key = bucketKey(cursor, granularity);
+      if (!seen.has(key)) {
+        seen.add(key);
+        keys.push(key);
+      }
     }
     cursor.setDate(cursor.getDate() + 1);
   }
   return keys;
+}
+
+/** Weekdag-opties voor de "vergelijk dezelfde dag van de week"-filter,
+ * waarde volgens `Date.getDay()` (0=zondag). */
+export const WEEKDAY_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: "Maandag" },
+  { value: 2, label: "Dinsdag" },
+  { value: 3, label: "Woensdag" },
+  { value: 4, label: "Donderdag" },
+  { value: 5, label: "Vrijdag" },
+  { value: 6, label: "Zaterdag" },
+  { value: 0, label: "Zondag" },
+];
+
+/** Filtert rijen met een `date`-veld op weekdag (0=zondag..6=zaterdag) --
+ * `null`/`undefined` laat alles staan. Gebruikt door elke per-dag-
+ * rapportage vóór het bucketen, zodat trimToDataRange/bucketRangeKeys
+ * daarna al met de gefilterde set werken. */
+export function filterByWeekday<T extends { date: Date }>(rows: T[], weekday: number | null | undefined): T[] {
+  if (weekday === null || weekday === undefined) return rows;
+  return rows.filter((row) => row.date.getDay() === weekday);
 }
 
 /**
