@@ -8,9 +8,13 @@ import { Card } from "@/components/ui";
 import type { ReportPeriod } from "@/lib/reports";
 
 /** KPI-tegels bovenaan, zelfde vier kerncijfers als het "Dashboard"-tabblad
- * van River Roots' brondocument (Victor Mshati, sep 2026). */
+ * van River Roots' brondocument (Victor Mshati, sep 2026). Standaard "Dit
+ * jaar" i.p.v. "Afgelopen 30 dagen" -- de hele geïmporteerde geschiedenis
+ * beslaat vooralsnog alleen mei t/m augustus 2026, dus een 30-dagen-venster
+ * verborg standaard het grootste deel van de data (leek dan alsof mei
+ * "ontbrak", terwijl het gewoon buiten het gekozen venster viel). */
 export function KpiTiles({ ships }: { ships: { id: string; name: string }[] }) {
-  const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
+  const [period, setPeriod] = useState<ReportPeriod>("THIS_YEAR");
   const [shipId, setShipId] = useState("");
   const [kpis, setKpis] = useState<Awaited<ReturnType<typeof getFoodWasteKpis>> | null>(null);
 

@@ -11,9 +11,10 @@ import { Card } from "@/components/ui";
 import type { ReportPeriod } from "@/lib/reports";
 
 /** Uitsplitsing per maaltijdtype -- welke maaltijd de meeste verspilling
- * veroorzaakt, zelfde vraag als Victor's "Meal Analysis"-tabblad. */
+ * veroorzaakt, zelfde vraag als Victor's "Meal Analysis"-tabblad. Standaard
+ * "Dit jaar" i.p.v. "Afgelopen 30 dagen" -- zie toelichting bij KpiTiles. */
 export function MealAnalysisChart({ ships }: { ships: { id: string; name: string }[] }) {
-  const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
+  const [period, setPeriod] = useState<ReportPeriod>("THIS_YEAR");
   const [shipId, setShipId] = useState("");
   const [rows, setRows] = useState<Awaited<ReturnType<typeof getFoodWasteMealAnalysis>> | null>(null);
 

@@ -14,8 +14,10 @@ const STATUS_STYLE: Record<LocationStatus, string> = {
   NO_DATA: "bg-slate-100 text-slate-500",
 };
 
+/** Standaard "Dit jaar" i.p.v. "Afgelopen 30 dagen" -- zie toelichting bij
+ * KpiTiles. */
 export function LocationSummaryTable({ ships }: { ships: { id: string; name: string }[] }) {
-  const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
+  const [period, setPeriod] = useState<ReportPeriod>("THIS_YEAR");
   const [shipId, setShipId] = useState("");
   const [rows, setRows] = useState<Awaited<ReturnType<typeof getFoodWasteLocationSummary>> | null>(null);
   const [isPending, startTransition] = useTransition();

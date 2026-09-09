@@ -18,9 +18,10 @@ type DailyReport = Awaited<ReturnType<typeof getFoodWasteDailyReport>>;
 /** Dagelijkse (of week/maand/kwartaal-)voedselverspilling met afwijkingen
  * t.o.v. de trend -- was voorheen de simpele grafiek op Rapportages, nu
  * hier met dezelfde filters/opzet als de andere rapportages i.p.v. een
- * aparte, minder capabele versie. */
+ * aparte, minder capabele versie. Standaard "Dit jaar" i.p.v. "Afgelopen
+ * 30 dagen" -- zie toelichting bij KpiTiles. */
 export function DailyWasteChart({ ships }: { ships: { id: string; name: string }[] }) {
-  const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
+  const [period, setPeriod] = useState<ReportPeriod>("THIS_YEAR");
   const [shipId, setShipId] = useState("");
   const [granularity, setGranularity] = useState<Granularity>("DAY");
   const [weekday, setWeekday] = useState<number | null>(null);
