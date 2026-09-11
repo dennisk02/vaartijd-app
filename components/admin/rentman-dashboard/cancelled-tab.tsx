@@ -9,6 +9,8 @@ import { formatEuro, formatMonthLabel } from "./format";
 import type { Subproject } from "@/integrations/rentman/dashboardAggregate";
 import { cancelledByMonth, cancelledInMonth, cancelledKpis } from "@/integrations/rentman/dashboardAggregate";
 
+const CANCELLED = "Geannuleerd";
+
 export function CancelledTab({ subs, months }: { subs: Subproject[]; months: string[] }) {
   const [active, setActive] = useState(months[0] ?? "");
   const kpi = cancelledKpis(subs);
@@ -16,6 +18,18 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
   const chartRevenue = byMonth.map((m) => ({ month: formatMonthLabel(m.month), "Gederfde omzet": Math.round(m.revenue) }));
   const chartCount = byMonth.map((m) => ({ month: formatMonthLabel(m.month), Aantal: m.count }));
   const rows = cancelledInMonth(subs, active || months[0] || "");
+
+  // Verdeling per annuleringsreden, over alle maanden -- pas zinvol sinds
+  // het custom-veld "Reden annulering" in Rentman staat (11 sep 2026); veel
+  // oudere annuleringen hebben nog geen reden ingevuld ("Niet bekend"),
+  // dat vult zich vanzelf verder in naarmate medewerkers het invullen.
+  const byReason = new Map<string, number>();
+  for (const s of subs) {
+    if (s.status !== CANCELLED) continue;
+    const reason = s.cancellationReason ?? "Niet bekend";
+    byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
+  }
+  const reasonRows = [...byReason.entries()].sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -64,9 +78,36 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
         </ChartCard>
       </div>
 
-      <Callout tone="warn">
-        <b>Annuleringsreden:</b> niet beschikbaar via de Rentman-API — vereist een custom veld in Rentman.
-      </Callout>
+      <div className="rounded-[10px] border p-4" style={{ background: dash.panel, borderColor: dash.border }}>
+        <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.text }}>
+          Verdeling per annuleringsreden
+        </h2>
+        <p className="mb-3 text-[11px]" style={{ color: dash.mutedLight }}>
+          Alle maanden samen · komt uit Rentmans &quot;Reden annulering&quot;-veld
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {reasonRows.map(([reason, count]) => (
+            <span
+              key={reason}
+              className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+              style={
+                reason === "Niet bekend"
+                  ? { background: dash.panel2, color: dash.muted }
+                  : { background: "rgba(239,87,87,0.12)", color: dash.red }
+              }
+            >
+              {reason} ({count})
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {reasonRows.some(([reason]) => reason === "Niet bekend") && (
+        <Callout tone="info">
+          Een deel van de annuleringen heeft nog geen reden ({byReason.get("Niet bekend")}) -- dat vult zich
+          aan naarmate medewerkers het veld invullen op oudere, al geannuleerde projecten.
+        </Callout>
+      )}
 
       <div className="rounded-[10px] border p-4" style={{ background: dash.panel, borderColor: dash.border }}>
         <h2 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.text }}>
@@ -117,8 +158,15 @@ export function CancelledTab({ subs, months }: { subs: Subproject[]; months: str
                   <td className="px-2.5 py-1.5" style={{ color: dash.text }}>{r.name}</td>
                   <td className="px-2.5 py-1.5" style={{ color: dash.muted }}>{r.city ? `📍 ${r.city}` : "-"}</td>
                   <td className="px-2.5 py-1.5">
-                    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: dash.panel2, color: dash.muted }}>
-                      niet bekend
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                      style={
+                        r.cancellationReason && r.cancellationReason !== "Niet bekend"
+                          ? { background: "rgba(239,87,87,0.12)", color: dash.red }
+                          : { background: dash.panel2, color: dash.muted }
+                      }
+                    >
+                      {r.cancellationReason ?? "Niet bekend"}
                     </span>
                   </td>
                   <td className="px-2.5 py-1.5 text-right font-semibold" style={{ color: r.revenue > 0 ? dash.red : dash.mutedLight }}>

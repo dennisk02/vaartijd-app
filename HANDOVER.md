@@ -757,10 +757,21 @@ hieronder) — alle drie afgeleid in `dashboardSync.ts` (`cityOf`/`businessUnitO
   4. **In optie & aanvraag** — alle projecten met status Optie/Aanvraag, per aanmaakmaand (subtabs)
      in twee parallelle kolommen (net als v6.1's `buildColumn`), met Locatie en BV-kolom, rood
      gemarkeerd wanneer de periode al verlopen is. Zie `pendingByMonth()`.
-  5. **Geannuleerd** — 4 KPI's (incl. gederfde omzet, grootste annulering), 2 grafieken,
-     maandkiezer met tabel van geannuleerde projecten (#, Project, Locatie, Reden annulering,
-     Gederfde omzet) gesorteerd op offertebedrag. "Reden annulering" toont altijd "niet bekend"
-     (net als v6.1) — geen custom veld in Rentman, zie de Callout op dit tabblad.
+  5. **Geannuleerd** — 4 KPI's (incl. gederfde omzet, grootste annulering), 2 grafieken, een
+     verdeling per annuleringsreden (badges, alle maanden samen), maandkiezer met tabel van
+     geannuleerde projecten (#, Project, Locatie, Reden annulering, Gederfde omzet) gesorteerd op
+     offertebedrag. **Reden annulering (11 sep 2026):** de klant voegde zelf een custom keuzelijst-
+     veld "Reden annulering" toe aan het Project in Rentman (`custom_9`) — Rentman geeft alleen het
+     ruwe keuze-ID terug (bv. "5"), geen tekst en er is geen metadata-endpoint om keuzelijst-opties
+     op te vragen; de ID→tekst-koppeling (`CANCELLATION_REASON_OPTIONS` in `dashboardSync.ts`) is
+     daarom handmatig vastgesteld door één testinvoer van de klant te vergelijken met de Rentman-UI
+     (screenshot) en moet **handmatig bijgewerkt worden** als de klant een optie toevoegt/wijzigt.
+     Zit op het Project, niet het Subproject (dat heeft in dit account nooit custom-velden) --
+     apart opgehaald via `fetchAllProjectCustomFields()` (client.ts) en gejoined op project-id,
+     want de geëxpandeerde Project-respons op `/subprojects` bevat zelf geen `custom`-veld. Nieuwe
+     kolom `RentmanSubprojectSnapshot.cancellationReason` (migratie
+     `20260911150000_rentman_cancellation_reason`). Oudere annuleringen (van vóór het veld
+     bestond) tonen "Niet bekend" totdat een medewerker het alsnog invult.
   *(Een 6e tabblad, "🏗️ Naar AFAS", stond hier tussen 27 aug en 2 sep 2026 — op uitdrukkelijk
   verzoek van de klant verplaatst naar een losse pagina, zie §10.8.)*
 - **Donker thema (25 aug 2026)** — de klant leverde een tweede stijlgids aan

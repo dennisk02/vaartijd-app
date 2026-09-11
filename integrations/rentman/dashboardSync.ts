@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   fetchAllSubprojectsFinancial,
   fetchAllInvoicesForDashboard,
+  fetchAllProjectCustomFields,
   businessUnitFor,
   type RentmanFinancialSubproject,
 } from "@/integrations/rentman/client";
@@ -40,6 +41,34 @@ function cancelledRevenueOf(sp: RentmanFinancialSubproject): number | null {
   return Number(sp.project_total_price_cancelled ?? 0);
 }
 
+/**
+ * Annuleringsreden: een custom keuzelijst-veld op het Project ("Reden
+ * annulering", `custom_9`), door de klant zelf toegevoegd in Rentman (sep
+ * 2026). Rentman geeft alleen het ruwe keuze-ID terug (bv. "5"), geen tekst
+ * -- deze koppeling is handmatig vastgesteld door één testinvoer te
+ * vergelijken met de daadwerkelijke Rentman-UI (project "EVENTO - Stern
+ * Partyservice Huussien", custom_9=5 -> "Event geannuleerd"). Er is geen
+ * metadata-endpoint in de Rentman-API om keuzelijst-opties op te vragen, dus
+ * deze mapping moet hier handmatig bijgewerkt worden als de klant een optie
+ * toevoegt/wijzigt in Rentman. Onbekende/nieuwe ID's vallen terug op
+ * `Onbekende reden (id <n>)` i.p.v. een crash of stille misclassificatie.
+ */
+const CANCELLATION_REASON_OPTIONS: Record<string, string> = {
+  "0": "Niet bekend",
+  "1": "Prijs",
+  "2": "Datum bezet",
+  "3": "Naar concurrent",
+  "4": "Materiaal tekort",
+  "5": "Event geannuleerd",
+  "6": "Transportkosten",
+  "7": "Geen reactie klant",
+};
+
+function cancellationReasonLabel(rawId: string | undefined): string | null {
+  if (rawId === undefined) return null;
+  return CANCELLATION_REASON_OPTIONS[rawId] ?? `Onbekende reden (id ${rawId})`;
+}
+
 // businessUnitFor() verhuisde naar integrations/rentman/client.ts (2 sep 2026) --
 // gedeeld met de projectsync (§10.6/§10.8, ProjectRentmanLink.rentmanBusinessUnit)
 // zodat beide altijd dezelfde EVENTO/M&R Kampen/M&R Utrecht-classificatie gebruiken.
@@ -65,21 +94,31 @@ function cityOf(sp: RentmanFinancialSubproject): string | null {
 
 export async function syncRentmanDashboard() {
   const year = new Date().getUTCFullYear();
-  const [subprojects, invoices] = await Promise.all([
+  const [subprojects, invoices, projectCustomFields] = await Promise.all([
     fetchAllSubprojectsFinancial(year),
     fetchAllInvoicesForDashboard(year),
+    fetchAllProjectCustomFields(),
   ]);
+  // custom_9 = "Reden annulering" (zie cancellationReasonLabel hierboven) --
+  // apart per project opgehaald, want de geëxpandeerde Project-respons op
+  // /subprojects bevat zelf geen `custom`-veld.
+  const cancellationReasonByProjectId = new Map(
+    projectCustomFields.map((p) => [String(p.id), p.custom?.custom_9])
+  );
 
   // --- Ruwe subproject-snapshot (bron voor alle tabbladen) ---
   for (const sp of subprojects) {
     const month = monthKey(sp.created);
     if (!month || !sp.created) continue; // geen bruikbare aanmaakdatum, sla over
+    const isCancelled = (sp.status?.name ?? "") === CANCELLED_STATUS;
+    const projectId = sp.project?.id != null ? String(sp.project.id) : null;
     const data = {
       name: sp.name,
       rentmanProjectNumber: sp.project?.number != null ? String(sp.project.number) : null,
       status: sp.status?.name ?? "Onbekend",
       revenue: Number(sp.project_total_price ?? 0),
       cancelledRevenue: cancelledRevenueOf(sp),
+      cancellationReason: isCancelled && projectId ? cancellationReasonLabel(cancellationReasonByProjectId.get(projectId)) : null,
       invoiced: Number(sp.already_invoiced ?? 0),
       month,
       createdAt: new Date(sp.created),

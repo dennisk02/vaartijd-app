@@ -135,8 +135,12 @@ export type RentmanFinancialSubproject = {
   name: string;
   // "number" en "project_type" zitten op het bovenliggende Project, niet op
   // het Subproject zelf -- vandaar expand=project.project_type hieronder
-  // (project_type is nodig voor de "Categorie"-classificatie, §10.5).
-  project?: { number?: number | string; project_type?: { name?: string } | null } | null;
+  // (project_type is nodig voor de "Categorie"-classificatie, §10.5). "id"
+  // is nodig om te joinen met fetchAllProjectCancellationReasons() hieronder
+  // -- de geëxpandeerde Project-respons bevat zelf geen `custom`-veld, ook
+  // niet met een expliciete `fields=project.custom` (bevestigd via een live
+  // testaanroep, 11 sep 2026), dus dat moet apart via /projects opgehaald.
+  project?: { id?: number | string; number?: number | string; project_type?: { name?: string } | null } | null;
   status?: { name?: string } | null;
   planperiod_start?: string | null;
   planperiod_end?: string | null;
@@ -183,6 +187,24 @@ export async function fetchAllSubprojectsFinancial(year: number) {
       "id,name,project,status,planperiod_start,planperiod_end,created,project_total_price,project_total_price_cancelled,already_invoiced,asset_location_from,location",
     "created[gte]": `${year}-01-01T00:00:00+00:00`,
     "created[lt]": `${year + 1}-01-01T00:00:00+00:00`,
+  });
+}
+
+export type RentmanProjectCustomFields = {
+  id: number | string;
+  custom?: Record<string, string> | null;
+};
+
+/**
+ * Rentman's `custom`-object per Project bevat alleen ruwe keuzelijst-ID's
+ * (bv. `{"custom_9": "5"}`), geen tekst -- vandaar deze losse ophaal + de
+ * ID->tekst-koppeling in dashboardSync.ts. Zonder `created`-filter (alle
+ * jaren): dit is een lichte aanroep (alleen id+custom), en een geannuleerd
+ * subproject van een ouder project moet zijn annuleringsreden ook tonen.
+ */
+export async function fetchAllProjectCustomFields() {
+  return rentmanFetchAll<RentmanProjectCustomFields>("projects", {
+    fields: "id,custom",
   });
 }
 

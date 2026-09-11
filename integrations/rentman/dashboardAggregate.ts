@@ -10,6 +10,8 @@ export type Subproject = {
   status: string;
   revenue: number;
   cancelledRevenue: number | null;
+  // Alleen gevuld bij status "Geannuleerd" (zie dashboardSync.ts).
+  cancellationReason: string | null;
   invoiced: number;
   month: string;
   createdAt: Date;
@@ -227,10 +229,23 @@ export function cancelledByMonth(subs: Subproject[]) {
   });
 }
 
-export function cancelledInMonth(subs: Subproject[], month: string) {
+export type CancelledRow = ProjectRow & { cancellationReason: string | null };
+
+export function cancelledInMonth(subs: Subproject[], month: string): CancelledRow[] {
   return subs
     .filter((s) => s.month === month && s.status === CANCELLED)
-    .map((s): ProjectRow => ({ id: s.id, number: s.projectNumber, name: s.name, city: s.city, period: s.planperiodStart, revenue: s.cancelledRevenue ?? 0, invoiced: 0 }))
+    .map(
+      (s): CancelledRow => ({
+        id: s.id,
+        number: s.projectNumber,
+        name: s.name,
+        city: s.city,
+        period: s.planperiodStart,
+        revenue: s.cancelledRevenue ?? 0,
+        invoiced: 0,
+        cancellationReason: s.cancellationReason,
+      })
+    )
     .sort((a, b) => b.revenue - a.revenue);
 }
 

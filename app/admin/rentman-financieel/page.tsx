@@ -27,6 +27,7 @@ export default async function RentmanFinancieelPage() {
     status: r.status,
     revenue: Number(r.revenue),
     cancelledRevenue: r.cancelledRevenue != null ? Number(r.cancelledRevenue) : null,
+    cancellationReason: r.cancellationReason,
     invoiced: Number(r.invoiced),
     month: r.month,
     createdAt: r.createdAt,
