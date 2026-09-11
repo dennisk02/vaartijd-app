@@ -4,6 +4,7 @@ import { requireAdminScope } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { getHoursReport, getOccupancyReport, getMealsServedReport } from "@/lib/actions/reports";
 import { getRosterComparisonReport } from "@/lib/actions/roster-reports";
+import { startOfWeek } from "@/lib/reports";
 
 export type ReportWarningCategory = "GEWERKT" | "VERLOF" | "ZIEKTE" | "BEZETTING" | "MAALTIJDEN" | "ROOSTER";
 
@@ -38,6 +39,12 @@ function formatDeviation(actual: number, expected: number, unit: string) {
  * vergroten (elke schip × elke rapportage) voor iets dat niet expliciet
  * gevraagd is -- alleen uren (waar wél expliciet om gevraagd is) krijgt de
  * per-schip uitsplitsing.
+ *
+ * Uren-waarschuwingen (gewerkt/verlof/ziekte) over de lopende, nog niet
+ * afgeronde week worden er weer uitgefilterd -- anders meldt bv. een
+ * dinsdag al "veel minder gewerkt dan verwacht" simpelweg omdat de week nog
+ * niet voorbij is, geen echte afwijking. Bezetting/maaltijden/rooster
+ * krijgen deze filter (nog) niet, alleen expliciet voor uren gevraagd.
  */
 export async function getReportWarnings(): Promise<ReportWarning[]> {
   await requireAdminScope("RAPPORTAGES");
@@ -138,5 +145,13 @@ export async function getReportWarnings(): Promise<ReportWarning[]> {
     }
   }
 
-  return warnings.sort((a, b) => b.date.localeCompare(a.date));
+  // De lopende, nog niet afgeronde week geeft valse afwijkingen (bv. "veel
+  // lager dan verwacht" simpelweg omdat de week nog niet voorbij is) --
+  // alleen voor uren-waarschuwingen (gewerkt/verlof/ziekte), zoals gevraagd;
+  // bezetting/maaltijden/rooster ongewijzigd.
+  const currentWeekStart = startOfWeek(new Date()).toISOString().slice(0, 10);
+  const isHoursCategory = (c: ReportWarningCategory) => c === "GEWERKT" || c === "VERLOF" || c === "ZIEKTE";
+  const filtered = warnings.filter((w) => !isHoursCategory(w.category) || w.date < currentWeekStart);
+
+  return filtered.sort((a, b) => b.date.localeCompare(a.date));
 }

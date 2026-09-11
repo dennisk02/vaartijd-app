@@ -33,8 +33,8 @@ export default async function AdminRapportagesPage() {
           Punten die duidelijk van de trend afwijken staan onder de grafiek genoemd.
         </p>
       </div>
-      <ReportWarningsPanel warnings={warnings} />
       <HoursReportChart ships={ships} />
+      <ReportWarningsPanel warnings={warnings} />
       <OccupancyReportChart ships={ships} />
       <MealsServedChart ships={ships} />
       <RosterComparisonChart ships={ships} />

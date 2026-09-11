@@ -67,7 +67,10 @@ export const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
   { value: "QUARTER", label: "Per kwartaal" },
 ];
 
-function startOfWeek(date: Date): Date {
+/** Maandag van de week waarin `date` valt -- geëxporteerd (naast intern
+ * gebruik door bucketKey hieronder) omdat lib/actions/warnings.ts hiermee
+ * de lopende, nog niet afgeronde week herkent en uitsluit. */
+export function startOfWeek(date: Date): Date {
   const d = new Date(date);
   const day = d.getDay(); // 0 = zondag
   const diff = (day === 0 ? -6 : 1) - day; // naar de maandag van deze week
