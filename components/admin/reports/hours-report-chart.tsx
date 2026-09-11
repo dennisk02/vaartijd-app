@@ -17,10 +17,10 @@ import { chartColors } from "./palette";
 type HoursReport = Awaited<ReturnType<typeof getHoursReport>>;
 
 /** Uren per dag, uitgesplitst in gewerkt/verlof/ziekte (verlof/ziekte komt
- * uit Shiftbase, zie lib/actions/reports.ts). Het schip-filter werkt alleen
- * op de gewerkte uren -- verlof/ziekte is in Shiftbase niet aan een schip
- * gebonden en toont dus altijd de hele bemanning, vandaar de melding zodra
- * er een schip gekozen is. */
+ * uit Shiftbase, zie lib/actions/reports.ts). Verlof/ziekte heeft in
+ * Shiftbase geen eigen schip -- bij een schip-filter wordt het per
+ * medewerker afgeleide "gebruikelijke schip" gebruikt (roosterhistorie),
+ * vandaar de meldingstekst zodra er een schip gekozen is. */
 export function HoursReportChart({ ships }: { ships: { id: string; name: string }[] }) {
   const [period, setPeriod] = useState<ReportPeriod>("LAST_30_DAYS");
   const [shipId, setShipId] = useState("");
@@ -64,8 +64,9 @@ export function HoursReportChart({ ships }: { ships: { id: string; name: string 
 
       {shipId && (
         <p className="mb-3 text-xs text-slate-500">
-          Verlof en ziekte zijn in Shiftbase niet per schip geregistreerd en tonen hier altijd de hele bemanning
-          -- alleen de gewerkte uren zijn gefilterd op het gekozen schip.
+          Verlof en ziekte zijn in Shiftbase niet direct aan een schip gekoppeld -- hier toegewezen op basis van
+          het schip waarop de medewerker doorgaans staat ingeroosterd, dus een schatting i.p.v. een directe
+          koppeling.
         </p>
       )}
 
@@ -124,10 +125,24 @@ export function HoursReportChart({ ships }: { ships: { id: string; name: string 
         )}
       </div>
 
-      {report && (
+      {report && showGewerkt && (
         <DeviationNote
           heading="Gewerkte uren wijken af van de verwachte trend:"
           items={report.deviations.map((d) => ({ label: bucketLabel(d.date, granularity), actual: d.actual, expected: d.expected }))}
+          unit="uur"
+        />
+      )}
+      {report && showVerlof && (
+        <DeviationNote
+          heading="Verlof wijkt af van de verwachte trend:"
+          items={report.deviationsVerlof.map((d) => ({ label: bucketLabel(d.date, granularity), actual: d.actual, expected: d.expected }))}
+          unit="uur"
+        />
+      )}
+      {report && showZiekte && (
+        <DeviationNote
+          heading="Ziekte wijkt af van de verwachte trend:"
+          items={report.deviationsZiekte.map((d) => ({ label: bucketLabel(d.date, granularity), actual: d.actual, expected: d.expected }))}
           unit="uur"
         />
       )}

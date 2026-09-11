@@ -6,15 +6,20 @@ import { HoursReportChart } from "@/components/admin/reports/hours-report-chart"
 import { OccupancyReportChart } from "@/components/admin/reports/occupancy-report-chart";
 import { MealsServedChart } from "@/components/admin/reports/meals-served-chart";
 import { RosterComparisonChart } from "@/components/admin/reports/roster-comparison-chart";
+import { ReportWarningsPanel } from "@/components/admin/reports/report-warnings-panel";
+import { getReportWarnings } from "@/lib/actions/warnings";
 
 export default async function AdminRapportagesPage() {
   await requireAdminScope("RAPPORTAGES");
 
-  const ships = await prisma.ship.findMany({
-    where: { active: true },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  const [ships, warnings] = await Promise.all([
+    prisma.ship.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    getReportWarnings(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -28,6 +33,7 @@ export default async function AdminRapportagesPage() {
           Punten die duidelijk van de trend afwijken staan onder de grafiek genoemd.
         </p>
       </div>
+      <ReportWarningsPanel warnings={warnings} />
       <HoursReportChart ships={ships} />
       <OccupancyReportChart ships={ships} />
       <MealsServedChart ships={ships} />

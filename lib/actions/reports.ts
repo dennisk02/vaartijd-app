@@ -22,24 +22,74 @@ function deviationBuckets(keys: string[], deviations: TrendAnalysis["deviations"
 type HoursBucket = { gewerkt: number; verlof: number; ziekte: number };
 
 /**
+ * Shiftbase's `/absentees` geeft geen schip/afdeling mee (zie
+ * integrations/shiftbase/sync.ts) -- maar we weten wél van wie een
+ * ziekte-/verlofmelding is (`AbsenceEntry.userId`), en via hun rooster-
+ * historie (`RosterEntry`, met wél een schip) welke boot ze doorgaans
+ * draaien. Deze functie leidt daarom per medewerker het schip af waarop hij
+ * de meeste geplande diensten heeft (in de gekozen periode; valt terug op
+ * de hele historie als iemand in de periode zelf geen roosterregels heeft,
+ * bv. bij langdurig verlof). Een schatting, geen directe Shiftbase-
+ * koppeling -- vandaar expliciet benoemd in de UI (hours-report-chart.tsx)
+ * als "op basis van rooster-historie" i.p.v. als harde koppeling.
+ */
+async function getPrimaryShipForUsers(userIds: string[], periodStart: Date, periodEnd: Date): Promise<Map<string, string | null>> {
+  if (userIds.length === 0) return new Map();
+
+  const [inPeriod, allTime] = await Promise.all([
+    prisma.rosterEntry.groupBy({
+      by: ["userId", "shipId"],
+      where: { userId: { in: userIds }, shipId: { not: null }, date: { gte: periodStart, lt: periodEnd } },
+      _count: { _all: true },
+    }),
+    prisma.rosterEntry.groupBy({
+      by: ["userId", "shipId"],
+      where: { userId: { in: userIds }, shipId: { not: null } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  function bestShipPerUser(rows: { userId: string; shipId: string | null; _count: { _all: number } }[]) {
+    const best = new Map<string, { shipId: string; count: number }>();
+    for (const row of rows) {
+      if (!row.shipId) continue;
+      const current = best.get(row.userId);
+      if (!current || row._count._all > current.count) best.set(row.userId, { shipId: row.shipId, count: row._count._all });
+    }
+    return best;
+  }
+
+  const bestInPeriod = bestShipPerUser(inPeriod);
+  const bestAllTime = bestShipPerUser(allTime);
+
+  const result = new Map<string, string | null>();
+  for (const userId of userIds) {
+    result.set(userId, bestInPeriod.get(userId)?.shipId ?? bestAllTime.get(userId)?.shipId ?? null);
+  }
+  return result;
+}
+
+/**
  * Uren, gegroepeerd per gekozen granulariteit (dag/week/maand/kwartaal),
  * over de gekozen periode -- uitgesplitst in gewerkt (TimeEntry), verlof en
  * ziekte (AbsenceEntry uit Shiftbase, zie integrations/shiftbase/sync.ts).
  * Optioneel gefilterd op één schip (`shipId`) -- `undefined`/`null`
  * betekent alle schepen (en kantoor-/niet-scheepsgebonden uren, want
- * TimeEntry.shipId is nullable). **Het schip-filter werkt alleen op
- * gewerkte uren**: Shiftbase's afwezigheidsregistratie is niet aan een
- * afdeling/schip gebonden, dus verlof/ziekte tonen altijd de hele
- * bemanning ongeacht `shipId` -- de UI (hours-report-chart.tsx) maakt dit
- * expliciet zichtbaar zodra er een schip gekozen is. "Gewogen gemiddelde"
- * per categorie = totaal aantal uren van die categorie / aantal buckets
- * met minstens één registratie van die categorie. Toont alleen het bereik
- * waar daadwerkelijk data zit (trimToDataRange, over alle drie categorieën
- * samen) -- anders zou bv. "Dit jaar" met pas sinds juni data maandenlang
- * lege nulwaarden tonen. Bevat een lijst van buckets die significant van de
- * lineaire trend afwijken (lib/trend.ts), alleen op de gewerkte uren (de
- * meest actionable van de drie) -- de voorspellingslijn zelf wordt niet
- * getoond, alleen gebruikt om afwijkingen te herkennen. Optioneel
+ * TimeEntry.shipId is nullable). Verlof/ziekte hebben zelf geen schip in
+ * Shiftbase; bij een schip-filter wordt daarom per medewerker het meest
+ * gebruikelijke schip afgeleid uit de roosterhistorie (zie
+ * getPrimaryShipForUsers hierboven) -- een schatting, geen directe
+ * koppeling, wat de UI ook zo benoemt. "Gewogen gemiddelde" per categorie =
+ * totaal aantal uren van die categorie / aantal buckets met minstens één
+ * registratie van die categorie. Toont alleen het bereik waar daadwerkelijk
+ * data zit (trimToDataRange, over alle drie categorieën samen) -- anders
+ * zou bv. "Dit jaar" met pas sinds juni data maandenlang lege nulwaarden
+ * tonen. Bevat per categorie een eigen lijst van buckets die significant
+ * van de lineaire trend afwijken (lib/trend.ts,
+ * `deviations`/`deviationsVerlof`/`deviationsZiekte`) -- zo wordt bv. een
+ * plotselinge piek in ziekteverzuim net zo herkend als een ongewoon lage
+ * gewerkte-urendag. De voorspellingslijn zelf wordt niet getoond, alleen
+ * gebruikt om afwijkingen te herkennen. Optioneel
  * `weekday` (0=zondag..6=zaterdag, zie WEEKDAY_OPTIONS) beperkt tot één dag
  * van de week -- voor "vergelijk dezelfde dag" (bv. alle maandagen van dit
  * jaar).
@@ -53,16 +103,24 @@ export async function getHoursReport(
   await requireAdminScope("RAPPORTAGES");
   const { start, end } = getPeriodRange(period);
 
-  const [allEntries, allAbsences] = await Promise.all([
+  const [allEntries, allAbsencesRaw] = await Promise.all([
     prisma.timeEntry.findMany({
       where: { date: { gte: start, lt: end }, ...(shipId ? { shipId } : {}) },
       select: { date: true, hours: true },
     }),
     prisma.absenceEntry.findMany({
       where: { date: { gte: start, lt: end } },
-      select: { date: true, hours: true, isSick: true },
+      select: { date: true, hours: true, isSick: true, userId: true },
     }),
   ]);
+
+  let allAbsences = allAbsencesRaw;
+  if (shipId) {
+    const userIds = [...new Set(allAbsencesRaw.map((a) => a.userId))];
+    const shipByUser = await getPrimaryShipForUsers(userIds, start, end);
+    allAbsences = allAbsencesRaw.filter((a) => shipByUser.get(a.userId) === shipId);
+  }
+
   const entries = filterByWeekday(allEntries, weekday);
   const absences = filterByWeekday(allAbsences, weekday);
 
@@ -118,6 +176,14 @@ export async function getHoursReport(
     data.map((d) => d.gewerkt),
     TREND_WINDOW
   );
+  const { deviations: deviationsVerlof } = analyzeTrend(
+    data.map((d) => d.verlof),
+    TREND_WINDOW
+  );
+  const { deviations: deviationsZiekte } = analyzeTrend(
+    data.map((d) => d.ziekte),
+    TREND_WINDOW
+  );
 
   return {
     data,
@@ -129,6 +195,8 @@ export async function getHoursReport(
     weightedAverageZiekte: bucketsWithZiekte > 0 ? totalZiekte / bucketsWithZiekte : 0,
     unit: "uur" as const,
     deviations: deviationBuckets(keys, deviations).map((d) => ({ date: d.key, actual: d.actual, expected: d.expected })),
+    deviationsVerlof: deviationBuckets(keys, deviationsVerlof).map((d) => ({ date: d.key, actual: d.actual, expected: d.expected })),
+    deviationsZiekte: deviationBuckets(keys, deviationsZiekte).map((d) => ({ date: d.key, actual: d.actual, expected: d.expected })),
   };
 }
 
