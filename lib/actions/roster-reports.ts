@@ -12,56 +12,6 @@ import {
   type Granularity,
 } from "@/lib/reports";
 
-/**
- * Ziekte- en verlofuren, gegroepeerd per gekozen granulariteit, uit
- * Shiftbase (`AbsenceEntry`, zie integrations/shiftbase/sync.ts). Geen
- * schip-filter -- Shiftbase's afwezigheidsregistratie is niet aan een
- * afdeling/schip gebonden (in tegenstelling tot uren/bezetting/maaltijden).
- * Optioneel `weekday` (0=zondag..6=zaterdag) beperkt tot één dag van de
- * week, zelfde opzet als de andere rapportages (lib/actions/reports.ts).
- */
-export async function getAbsenceReport(period: ReportPeriod, granularity: Granularity = "DAY", weekday?: number | null) {
-  await requireAdminScope("RAPPORTAGES");
-  const { start, end } = getPeriodRange(period);
-
-  const allRows = await prisma.absenceEntry.findMany({
-    where: { date: { gte: start, lt: end } },
-    select: { date: true, hours: true, isSick: true },
-  });
-  const rows = filterByWeekday(allRows, weekday);
-
-  const byBucket = new Map<string, { sick: number; leave: number }>();
-  let totalSickHours = 0;
-  let totalLeaveHours = 0;
-  for (const row of rows) {
-    const key = bucketKey(row.date, granularity);
-    const bucket = byBucket.get(key) ?? { sick: 0, leave: 0 };
-    const hours = Number(row.hours);
-    if (row.isSick) {
-      bucket.sick += hours;
-      totalSickHours += hours;
-    } else {
-      bucket.leave += hours;
-      totalLeaveHours += hours;
-    }
-    byBucket.set(key, bucket);
-  }
-
-  const trimmed = trimToDataRange(rows.map((r) => r.date), start, end);
-  const keys = trimmed ? bucketRangeKeys(trimmed.start, trimmed.end, granularity, weekday) : [];
-  const data = keys.map((date) => {
-    const bucket = byBucket.get(date) ?? { sick: 0, leave: 0 };
-    return { date, ziekte: Math.round(bucket.sick * 100) / 100, verlof: Math.round(bucket.leave * 100) / 100 };
-  });
-
-  return {
-    data,
-    totalSickHours: Math.round(totalSickHours * 100) / 100,
-    totalLeaveHours: Math.round(totalLeaveHours * 100) / 100,
-    unit: "uur" as const,
-  };
-}
-
 export type RosterComparisonRow = { date: string; gepland: number; werkelijk: number };
 export type RosterComparisonDeviation = { date: string; gepland: number; werkelijk: number; verschil: number };
 
@@ -77,6 +27,12 @@ const DEVIATION_MIN_RATIO = 0.2;
  * historisch gemiddelde, betekenisvol. Een bucket telt als afwijkend bij
  * >= 2 uur verschil én >= 20% van het geplande aantal uren (of geheel
  * ongepland gewerkt/juist niet gewerkt terwijl wel gepland).
+ *
+ * Ziekte/verlof (AbsenceEntry) is bewust *niet* hier ondergebracht, maar
+ * als aparte gewerkt/verlof/ziekte-uitsplitsing in getHoursReport (lib/
+ * actions/reports.ts) -- dat sluit aan bij hoe de gebruiker naar de
+ * bestaande "Uren"-grafiek keek en voorkomt een derde, overlappende
+ * rapportage naast deze en de urengrafiek.
  */
 export async function getRosterComparisonReport(
   period: ReportPeriod,

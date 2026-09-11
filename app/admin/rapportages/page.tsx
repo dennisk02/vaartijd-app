@@ -5,7 +5,6 @@ import { Card } from "@/components/ui";
 import { HoursReportChart } from "@/components/admin/reports/hours-report-chart";
 import { OccupancyReportChart } from "@/components/admin/reports/occupancy-report-chart";
 import { MealsServedChart } from "@/components/admin/reports/meals-served-chart";
-import { AbsenceReportChart } from "@/components/admin/reports/absence-report-chart";
 import { RosterComparisonChart } from "@/components/admin/reports/roster-comparison-chart";
 
 export default async function AdminRapportagesPage() {
@@ -23,16 +22,15 @@ export default async function AdminRapportagesPage() {
         <h1 className="text-xl font-semibold text-red-800">Rapportages</h1>
         <p className="text-sm text-slate-500">
           Kies per grafiek een periode, groepering (dag/week/maand/kwartaal), eventueel een schip en/of een
-          vaste dag van de week (bv. alleen maandagen, om die dag apart te vergelijken).
-          &ldquo;Gewogen gem.&rdquo; is automatisch berekend uit de data en &ldquo;Doel&rdquo; is een
-          handmatig in te vullen streefwaarde ter vergelijking. Punten die duidelijk van de trend afwijken
-          staan onder de grafiek genoemd.
+          vaste dag van de week (bv. alleen maandagen, om die dag apart te vergelijken). Bij Uren per dag kun
+          je bovendien filteren op gewerkt/verlof/ziekte. &ldquo;Gewogen gem.&rdquo; is automatisch berekend
+          uit de data en &ldquo;Doel&rdquo; is een handmatig in te vullen streefwaarde ter vergelijking.
+          Punten die duidelijk van de trend afwijken staan onder de grafiek genoemd.
         </p>
       </div>
       <HoursReportChart ships={ships} />
       <OccupancyReportChart ships={ships} />
       <MealsServedChart ships={ships} />
-      <AbsenceReportChart />
       <RosterComparisonChart ships={ships} />
 
       <Card>

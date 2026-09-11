@@ -573,11 +573,15 @@ en dezelfde 35-dagen/maandelijkse-terugvul-vensters als de uren hierboven:
   roosterdefinities zelf al tot losse datums (`occurrence_id`) bij het opvragen met
   min_date/max_date -- geen aparte "herhalingslogica" nodig aan onze kant. Alleen gepubliceerde,
   niet-verwijderde regels worden overgenomen.
-- Rapportage: `/admin/rapportages` toont een "Ziekte & verlof"-grafiek (geen schip-filter, want
-  Shiftbase's afwezigheidsregistratie is niet aan een schip gebonden) en een "Rooster vs.
-  werkelijk"-grafiek (gepland tegenover daadwerkelijk gewerkte uren, met een eigen soort
+- Rapportage: ziekte/verlof zit **niet** in een eigen grafiek, maar als extra uitsplitsing
+  (gewerkt/verlof/ziekte, met een urencategorie-filter) in de bestaande "Uren per dag"-grafiek op
+  `/admin/rapportages` (`getHoursReport`, `lib/actions/reports.ts`) -- op verzoek van de klant, die
+  liever één urenoverzicht had dan een aparte ziekte/verlof-rapportage ernaast. Het schip-filter
+  werkt daar alleen op de gewerkte uren (verlof/ziekte is niet aan een schip gebonden in
+  Shiftbase); de UI toont een melding zodra er een schip gekozen is. Daarnaast een losse "Rooster
+  vs. werkelijk"-grafiek (gepland tegenover daadwerkelijk gewerkte uren, met een eigen soort
   "afwijking": een directe `|werkelijk - gepland|`-vergelijking, geen trendanalyse zoals bij de
-  andere rapportages). Zie `lib/actions/absence-reports.ts`.
+  andere rapportages). Zie `lib/actions/roster-reports.ts`.
 - Bewust **geen loon-/kostendata** meegenomen (uurloon/salaris/werkgeverskosten zitten wel in de
   Shiftbase-respons van `/timesheets` en `/rosters`, bevestigd via de verkenner) -- zelfde
   privacy-lijn als de bestaande vaarbemanning-import hierboven ("geen BSN, geboortedatum, adres,

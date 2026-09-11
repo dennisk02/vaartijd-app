@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getRosterComparisonReport } from "@/lib/actions/absence-reports";
+import { getRosterComparisonReport } from "@/lib/actions/roster-reports";
 import { bucketLabel, type ReportPeriod, type Granularity } from "@/lib/reports";
 import { Card } from "@/components/ui";
 import { PeriodSelect } from "./period-select";
@@ -16,7 +16,7 @@ import { chartColors } from "./palette";
 type RosterComparisonReport = Awaited<ReturnType<typeof getRosterComparisonReport>>;
 
 /** Gepland rooster (Shiftbase) versus daadwerkelijk gewerkte uren
- * (TimeEntry), naast elkaar per bucket -- zie lib/actions/absence-reports.ts
+ * (TimeEntry), naast elkaar per bucket -- zie lib/actions/roster-reports.ts
  * voor hoe een afwijking hier bepaald wordt (directe vergelijking, geen
  * trendanalyse zoals bij de andere rapportages). */
 export function RosterComparisonChart({ ships }: { ships: { id: string; name: string }[] }) {
