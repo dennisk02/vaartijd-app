@@ -363,3 +363,39 @@ export function followUpByMonth(subs: Subproject[]) {
   }
   return { months, data: result };
 }
+
+export type FollowUpAllRow = FollowUpRow & { month: string };
+
+/**
+ * Alle maanden bij elkaar, alleen 🔴 "Direct opvolgen" (`aandacht`) --
+ * doorlopend en toekomstig blijven bewust buiten dit overzicht (op
+ * verzoek, sep 2026): dat zijn juist de projecten die nog geen aandacht
+ * nodig hebben, waar dit overzicht specifiek voor is bedoeld om ze eruit
+ * te laten vallen. Gesorteerd op oudste periode-einde eerst (het langst
+ * verlopen project bovenaan) i.p.v. op bedrag zoals de per-maand-tabellen
+ * -- voor "wat moet ik het eerst oppakken" is hoe lang iets al verlopen is
+ * relevanter dan het bedrag.
+ */
+export function followUpAandachtAll(subs: Subproject[]): FollowUpAllRow[] {
+  const now = new Date();
+  const filtered = followUpFiltered(subs).filter((s) => followUpFlagOf(s, now) === "aandacht");
+
+  const byExpiryAsc = (a: Subproject, b: Subproject) => {
+    const aTime = a.planperiodEnd?.getTime() ?? Infinity;
+    const bTime = b.planperiodEnd?.getTime() ?? Infinity;
+    if (aTime !== bTime) return aTime - bTime;
+    return b.revenue - b.invoiced - (a.revenue - a.invoiced);
+  };
+
+  return [...filtered].sort(byExpiryAsc).map((s) => ({
+    id: s.id,
+    number: s.projectNumber,
+    name: s.name,
+    city: s.city,
+    open: s.revenue - s.invoiced,
+    period: s.planperiodStart,
+    expired: !!s.planperiodEnd && s.planperiodEnd < now,
+    flag: "aandacht" as const,
+    month: s.month,
+  }));
+}
