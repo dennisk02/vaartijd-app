@@ -69,6 +69,28 @@ function cancellationReasonLabel(rawId: string | undefined): string | null {
   return CANCELLATION_REASON_OPTIONS[rawId] ?? `Onbekende reden (id ${rawId})`;
 }
 
+/**
+ * Bron aanvraag: het andere custom keuzelijst-veld op het Project (`custom_8`),
+ * zelfde soort koppeling als CANCELLATION_REASON_OPTIONS hierboven -- ook
+ * bevestigd via dezelfde testinvoer (project "EVENTO - Stern Partyservice
+ * Huussien", custom_8=3 -> "Website"). In tegenstelling tot de
+ * annuleringsreden geldt dit voor élk subproject, niet alleen geannuleerde
+ * (elke aanvraag heeft een herkomst).
+ */
+const REQUEST_SOURCE_OPTIONS: Record<string, string> = {
+  "0": "Niet bekend",
+  "1": "Email",
+  "2": "Telefoon",
+  "3": "Website",
+  "4": "Beurs/netwerk",
+  "5": "Doorverwijzing",
+};
+
+function requestSourceLabel(rawId: string | undefined): string | null {
+  if (rawId === undefined) return null;
+  return REQUEST_SOURCE_OPTIONS[rawId] ?? `Onbekende bron (id ${rawId})`;
+}
+
 // businessUnitFor() verhuisde naar integrations/rentman/client.ts (2 sep 2026) --
 // gedeeld met de projectsync (§10.6/§10.8, ProjectRentmanLink.rentmanBusinessUnit)
 // zodat beide altijd dezelfde EVENTO/M&R Kampen/M&R Utrecht-classificatie gebruiken.
@@ -99,11 +121,15 @@ export async function syncRentmanDashboard() {
     fetchAllInvoicesForDashboard(year),
     fetchAllProjectCustomFields(),
   ]);
-  // custom_9 = "Reden annulering" (zie cancellationReasonLabel hierboven) --
-  // apart per project opgehaald, want de geëxpandeerde Project-respons op
+  // custom_9 = "Reden annulering", custom_8 = "Bron aanvraag" (zie
+  // cancellationReasonLabel/requestSourceLabel hierboven) -- apart per
+  // project opgehaald, want de geëxpandeerde Project-respons op
   // /subprojects bevat zelf geen `custom`-veld.
   const cancellationReasonByProjectId = new Map(
     projectCustomFields.map((p) => [String(p.id), p.custom?.custom_9])
+  );
+  const requestSourceByProjectId = new Map(
+    projectCustomFields.map((p) => [String(p.id), p.custom?.custom_8])
   );
 
   // --- Ruwe subproject-snapshot (bron voor alle tabbladen) ---
@@ -119,6 +145,9 @@ export async function syncRentmanDashboard() {
       revenue: Number(sp.project_total_price ?? 0),
       cancelledRevenue: cancelledRevenueOf(sp),
       cancellationReason: isCancelled && projectId ? cancellationReasonLabel(cancellationReasonByProjectId.get(projectId)) : null,
+      // Bron aanvraag geldt voor élk subproject, niet alleen geannuleerde --
+      // elke aanvraag heeft een herkomst.
+      requestSource: projectId ? requestSourceLabel(requestSourceByProjectId.get(projectId)) : null,
       invoiced: Number(sp.already_invoiced ?? 0),
       month,
       createdAt: new Date(sp.created),

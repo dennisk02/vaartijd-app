@@ -8,6 +8,7 @@ import { formatEuro, formatMonthLabel } from "./format";
 import type { Subproject } from "@/integrations/rentman/dashboardAggregate";
 import {
   BV_ORDER,
+  bronMaand,
   bvStats,
   catGroupMaand,
   monthlySeries,
@@ -15,11 +16,22 @@ import {
   omzetPerCategorie,
   openByStatus,
   overviewKpis,
+  SOURCE_ORDER,
+  sourceConversion,
+  sourceStats,
   statusByMonth,
 } from "@/integrations/rentman/dashboardAggregate";
 
 const BV_COLORS: Record<string, string> = { EVENTO: dash.blue, "M&R Kampen": dash.green, "M&R Utrecht": dash.orange };
 const CAT_GROUP_COLORS: Record<string, string> = { Verhuur: dash.blue, Catering: dash.green, Overig: dash.mutedLight };
+const SOURCE_COLORS: Record<string, string> = {
+  Website: dash.blue,
+  Email: dash.green,
+  Telefoon: dash.orange,
+  "Beurs/netwerk": dash.cyan,
+  Doorverwijzing: dash.red,
+  "Niet bekend": dash.mutedLight,
+};
 
 export function OverviewTab({
   subs,
@@ -36,6 +48,9 @@ export function OverviewTab({
   const bvMaand = omzetBvMaand(subs);
   const categorie = omzetPerCategorie(subs);
   const catMaand = catGroupMaand(subs);
+  const bron = sourceStats(subs);
+  const bronMaandData = bronMaand(subs);
+  const conversie = sourceConversion(subs);
 
   const revenueChartData = months.map((m) => ({ month: formatMonthLabel(m.month), Projectomzet: m.omzet, Gefactureerd: m.gefact }));
   const rateChartData = months.map((m) => ({ month: formatMonthLabel(m.month), pct: m.pct }));
@@ -57,6 +72,11 @@ export function OverviewTab({
     return row;
   });
   const categorieRows = Object.entries(categorie).sort((a, b) => b[1].omzet - a[1].omzet);
+  const bronChartData = bronMaandData.months.map((month, i) => {
+    const row: Record<string, string | number> = { month: formatMonthLabel(month) };
+    for (const src of SOURCE_ORDER) row[src] = bronMaandData.series[src][i];
+    return row;
+  });
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -300,6 +320,78 @@ export function OverviewTab({
         <b>BV-bepaling:</b> naam start met &quot;EVENTO&quot; → EVENTO; anders magazijn /stocklocations/4 → M&amp;R
         Utrecht, /stocklocations/1 → M&amp;R Kampen, onbekend/leeg → M&amp;R Kampen (fallback). <b>Categorie:</b>{" "}
         afgeleid van het Rentman-projecttype; onbekend/geen match → &quot;Overig&quot;.
+      </Callout>
+
+      <h3 className="mt-1 text-sm font-bold" style={{ color: dash.muted }}>
+        Herkomst
+      </h3>
+
+      <ChartCard title="Aanvragen per bron per maand" sub="Gestapeld · Aantal">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={bronChartData}>
+            <CartesianGrid vertical={false} stroke={dash.border} />
+            <XAxis dataKey="month" tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={{ stroke: dash.border }} tickLine={false} />
+            <YAxis tick={{ fontSize: 10, fill: dash.mutedLight }} axisLine={false} tickLine={false} width={30} />
+            <Tooltip
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              content={(props: any) => <ChartTooltip {...props} formatValue={(v: number) => `${v} aanvragen`} />}
+              cursor={{ fill: dash.panel2 }}
+            />
+            <Legend wrapperStyle={{ fontSize: 10, color: dash.mutedLight }} />
+            {SOURCE_ORDER.map((src) => (
+              <Bar key={src} dataKey={src} stackId="a" fill={SOURCE_COLORS[src]} radius={[2, 2, 0, 0]} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      <div className="rounded-[10px] border p-4" style={{ background: dash.panel, borderColor: dash.border }}>
+        <h4 className="mb-0.5 text-[13px] font-bold" style={{ color: dash.muted }}>
+          Aantal, omzet &amp; conversie per bron
+        </h4>
+        <p className="mb-3 text-[11px]" style={{ color: dash.mutedLight }}>
+          Bevestigd/geannuleerd % is berekend over aanvragen die al een uitkomst hebben (dus niet meer in optie,
+          aanvraag of concept staan) -- laat zien welk kanaal niet alleen de meeste, maar ook de beste aanvragen
+          oplevert.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse text-[12px]">
+            <thead>
+              <tr>
+                {["Bron", "Aantal", "Omzet", "Bevestigd %", "Geannuleerd %"].map((h, i) => (
+                  <th
+                    key={h}
+                    className="px-2.5 py-1.5 text-[10px] font-semibold uppercase"
+                    style={{ background: dash.panel2, color: dash.muted, textAlign: i === 0 ? "left" : "right" }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {conversie.map((row) => (
+                <tr key={row.source} className="border-t" style={{ borderColor: dash.border }}>
+                  <td className="px-2.5 py-1.5 font-semibold" style={{ color: SOURCE_COLORS[row.source] }}>{row.source}</td>
+                  <td className="px-2.5 py-1.5 text-right" style={{ color: dash.muted }}>{row.aantal}</td>
+                  <td className="px-2.5 py-1.5 text-right font-semibold" style={{ color: dash.text }}>{formatEuro(bron[row.source]?.omzet ?? 0)}</td>
+                  <td className="px-2.5 py-1.5 text-right" style={{ color: row.resolved > 0 ? dash.green : dash.mutedLight }}>
+                    {row.resolved > 0 ? `${row.bevestigdPct}%` : "-"}
+                  </td>
+                  <td className="px-2.5 py-1.5 text-right" style={{ color: row.resolved > 0 ? dash.red : dash.mutedLight }}>
+                    {row.resolved > 0 ? `${row.geannuleerdPct}%` : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <Callout tone="info">
+        <b>Bron aanvraag:</b> Rentmans custom-veld op het project (&quot;Bron aanvraag&quot;), net als de
+        annuleringsreden op het Geannuleerd-tabblad handmatig ingevuld door medewerkers -- oudere/nog niet
+        ingevulde aanvragen tonen &quot;Niet bekend&quot;.
       </Callout>
     </div>
   );

@@ -534,6 +534,12 @@ model RentmanSubprojectSnapshot {
   /// (`CANCELLATION_REASON_OPTIONS`); niet in Rentman's API zelf op te
   /// vragen (geen toegankelijk metadata-endpoint voor keuzelijst-opties).
   cancellationReason   String?
+  /// Rentmans custom-veld "Bron aanvraag" op het Project -- `custom_8`, zelfde
+  /// soort keuzelijst als cancellationReason (11 sep 2026). In tegenstelling
+  /// tot cancellationReason bij élk subproject gevuld (niet alleen
+  /// geannuleerde): elke aanvraag heeft een herkomst, ongeacht de status.
+  /// Optie-id->tekst-koppeling: `REQUEST_SOURCE_OPTIONS` in dashboardSync.ts.
+  requestSource        String?
   invoiced             Decimal   @db.Decimal(12, 2)
   /// Aanmaakmaand, "2026-01" .. "2026-12" -- de groepering die de meeste
   /// tabbladen gebruiken (uitzondering: Maandoverleg groepeert op

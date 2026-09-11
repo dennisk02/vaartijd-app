@@ -12,6 +12,8 @@ export type Subproject = {
   cancelledRevenue: number | null;
   // Alleen gevuld bij status "Geannuleerd" (zie dashboardSync.ts).
   cancellationReason: string | null;
+  // Bij élk subproject gevuld, ongeacht status (zie dashboardSync.ts).
+  requestSource: string | null;
   invoiced: number;
   month: string;
   createdAt: Date;
@@ -159,6 +161,84 @@ export function catGroupMaand(subs: Subproject[]) {
     result[g] = months.map((month) => sum(subs.filter((s) => s.month === month && groupOf(s.category) === g).map((s) => s.revenue)));
   }
   return { months, series: result };
+}
+
+// --- Herkomst (Bron aanvraag) ---------------------------------------------
+//
+// `requestSource` komt uit Rentmans custom-veld "Bron aanvraag" (`custom_8`
+// op Project, zie dashboardSync.ts) -- ongeacht status gevuld, in
+// tegenstelling tot cancellationReason. `null` (nog niet gesynct van vóór
+// dit veld bestond) valt hier samen met "Niet bekend".
+
+export const SOURCE_ORDER = ["Website", "Email", "Telefoon", "Beurs/netwerk", "Doorverwijzing", "Niet bekend"];
+
+function sourceOf(s: Subproject): string {
+  return s.requestSource ?? "Niet bekend";
+}
+
+/** Aantal + omzet per bron, alle maanden samen -- zelfde opzet als bvStats. */
+export function sourceStats(subs: Subproject[]) {
+  const stats: Record<string, { aantal: number; omzet: number }> = {};
+  for (const src of SOURCE_ORDER) stats[src] = { aantal: 0, omzet: 0 };
+  for (const s of subs) {
+    const src = stats[sourceOf(s)] ? sourceOf(s) : "Niet bekend";
+    stats[src].aantal += 1;
+    stats[src].omzet += s.revenue;
+  }
+  return stats;
+}
+
+/** Aantal aanvragen per bron per maand -- voor de gestapelde maandgrafiek
+ * (zelfde opzet als omzetBvMaand, maar op aantal i.p.v. omzet: "waar komen
+ * de aanvragen vandaan" is hier de vraag, niet "welke omzet"). */
+export function bronMaand(subs: Subproject[]) {
+  const months = sortedMonths(subs);
+  const result: Record<string, number[]> = {};
+  for (const src of SOURCE_ORDER) {
+    result[src] = months.map((month) => subs.filter((s) => s.month === month && sourceOf(s) === src).length);
+  }
+  return { months, series: result };
+}
+
+export type SourceConversionRow = {
+  source: string;
+  aantal: number;
+  resolved: number;
+  bevestigdPct: number;
+  geannuleerdPct: number;
+};
+
+// Nog niet besliste statussen -- tellen niet mee in de conversie (die is
+// pas zinvol als bekend is of een aanvraag uiteindelijk doorging of niet).
+const UNRESOLVED_STATUSES = new Set(["Optie", "Aanvraag", "Concept"]);
+
+/** Van alle aanvragen per bron die al een uitkomst hebben (dus niet meer in
+ * optie/aanvraag/concept staan): welk percentage werd bevestigd (of verder,
+ * bv. al uitgevoerd) versus geannuleerd? Laat zien welke kanalen niet
+ * alleen de meeste, maar ook de béste (minst geannuleerde) aanvragen
+ * opleveren. */
+export function sourceConversion(subs: Subproject[]): SourceConversionRow[] {
+  const bySource = new Map<string, Subproject[]>();
+  for (const s of subs) {
+    const src = sourceOf(s);
+    const list = bySource.get(src) ?? [];
+    list.push(s);
+    bySource.set(src, list);
+  }
+
+  return SOURCE_ORDER.filter((src) => bySource.has(src)).map((src) => {
+    const list = bySource.get(src)!;
+    const resolved = list.filter((s) => !UNRESOLVED_STATUSES.has(s.status));
+    const cancelled = resolved.filter((s) => s.status === CANCELLED);
+    const confirmed = resolved.length - cancelled.length;
+    return {
+      source: src,
+      aantal: list.length,
+      resolved: resolved.length,
+      bevestigdPct: resolved.length > 0 ? Math.round((confirmed / resolved.length) * 100) : 0,
+      geannuleerdPct: resolved.length > 0 ? Math.round((cancelled.length / resolved.length) * 100) : 0,
+    };
+  });
 }
 
 // --- Tab 2: Projecten per maand -----------------------------------------

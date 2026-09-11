@@ -742,6 +742,18 @@ hieronder) — alle drie afgeleid in `dashboardSync.ts` (`cityOf`/`businessUnitO
        en facturatiegraad), 2 gestapelde maandgrafieken (omzet per BV; Verhuur/Catering/Overig),
        en 2 tabellen (omzet per BV per maand, omzet per categorie). Zie hierboven voor de
        BV/categorie-afleidingsregels.
+     - **Herkomst (11 sep 2026):** vergelijkbaar met de annuleringsreden hieronder een tweede
+       custom keuzelijst-veld op het Project, "Bron aanvraag" (`custom_8`), zelfde ID→tekst-
+       koppeling in `dashboardSync.ts` (`REQUEST_SOURCE_OPTIONS`) en dezelfde beperking (geen
+       Rentman-metadata-endpoint, dus handmatig bijhouden bij een optiewijziging). In tegenstelling
+       tot de annuleringsreden geldt dit voor élk subproject, niet alleen geannuleerde. Sectie:
+       gestapelde maandgrafiek (aantal aanvragen per bron) + één tabel met aantal, omzet en
+       conversie per bron. **Conversie** = van de aanvragen per bron die al een uitkomst hebben
+       (dus niet meer Optie/Aanvraag/Concept), welk percentage bevestigd resp. geannuleerd werd --
+       laat zien welk kanaal niet alleen de meeste, maar ook de béste aanvragen oplevert. Nieuwe
+       kolom `RentmanSubprojectSnapshot.requestSource` (migratie
+       `20260911160000_rentman_request_source`). Zie `sourceStats`/`bronMaand`/`sourceConversion`
+       in `dashboardAggregate.ts`.
   2. **Projecten per maand** — opent met een grafiek die alle maanden in één oogopslag toont
      (omzet per status, gestapeld, dezelfde `statusByMonth()`-aggregatie als tabblad 1); daaronder
      een maandkiezer met per maand 2 KPI's, een statuslijst met voortgangsbalken, een donut, en
