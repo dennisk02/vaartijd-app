@@ -25,7 +25,9 @@ export async function syncShiftbaseCrewNow(_state: ShiftbaseCrewSyncState): Prom
       message:
         `${result.departments} schepen/projecten, ${result.users} medewerkers verwerkt. ` +
         `Uren: ${result.timesheets.processed} verwerkt, ${result.timesheets.skippedNotApproved} nog niet goedgekeurd overgeslagen, ` +
-        `${result.timesheets.skippedNoShip} zonder gekoppeld schip, ${result.timesheets.skippedNoUser} zonder gekoppelde medewerker.`,
+        `${result.timesheets.skippedNoShip} zonder gekoppeld schip, ${result.timesheets.skippedNoUser} zonder gekoppelde medewerker. ` +
+        `Ziekte/verlof: ${result.absences.processed} dagregels verwerkt. ` +
+        `Rooster: ${result.rosters.processed} geplande diensten verwerkt.`,
     };
   } catch (error) {
     console.error("Onverwachte fout bij Shiftbase-vaarbemanning-import:", error);

@@ -553,8 +553,35 @@ dagen in, en legt ze vast in Vaartijd:
   vergelijkbare bulk-syncs.
 - Trigger: de "Nu importeren"-knop op `/admin/shiftbase`, of extern via
   `POST/GET /api/shiftbase/crew-import` (secret: `SHIFTBASE_IMPORT_SECRET`, of admin-sessie).
-  **Nog geen cron ingesteld** -- draait alleen handmatig totdat bewust gekozen wordt dit ook
-  dagelijks te automatiseren (zie §14 voor de Vercel Hobby-cronlimiet).
+  Draait sinds 8 sep 2026 ook elke nacht via de Vercel-cron (`vercel.json`).
+
+#### Ziekte/verlof + gepland rooster (11 sep 2026)
+
+Twee extra, eveneens alleen-lezende datasets, meegenomen in dezelfde sync (`syncShiftbaseCrew`)
+en dezelfde 35-dagen/maandelijkse-terugvul-vensters als de uren hierboven:
+
+- **`AbsenceEntry`** (`/absentees` + `/absentee_options`): één rij per kalenderdag binnen een
+  goedgekeurde afwezigheidsperiode (bewust uitgesplitst per dag i.p.v. per periode, zodat de
+  bestaande periode/granulariteit/weekdag-rapportage-infrastructuur, `lib/reports.ts`,
+  hergebruikt kon worden). `isSick` komt van het `leave`-vlag van de Shiftbase-optie (false =
+  ziekte-achtig, true = regulier verlof/vakantie/feestdag); `optionLabel` is een snapshot van de
+  Shiftbase-omschrijving (bv. "Sick", "Vacation"). Let op: Shiftbase geeft voor sommige nog niet
+  ingegane, al goedgekeurde verlofaanvragen zelf al `hours_per_day: 0` terug (nog niet doorgerekend
+  tegen een rooster) -- dat is dus geen importfout, gewoon een brondata-eigenaardigheid.
+- **`RosterEntry`** (`/rosters`): één rij per geplande dienst-datum, met dezelfde schip-afleiding
+  als `TimeEntry` (via de Shiftbase-department-koppeling). Shiftbase expandeert herhalende
+  roosterdefinities zelf al tot losse datums (`occurrence_id`) bij het opvragen met
+  min_date/max_date -- geen aparte "herhalingslogica" nodig aan onze kant. Alleen gepubliceerde,
+  niet-verwijderde regels worden overgenomen.
+- Rapportage: `/admin/rapportages` toont een "Ziekte & verlof"-grafiek (geen schip-filter, want
+  Shiftbase's afwezigheidsregistratie is niet aan een schip gebonden) en een "Rooster vs.
+  werkelijk"-grafiek (gepland tegenover daadwerkelijk gewerkte uren, met een eigen soort
+  "afwijking": een directe `|werkelijk - gepland|`-vergelijking, geen trendanalyse zoals bij de
+  andere rapportages). Zie `lib/actions/absence-reports.ts`.
+- Bewust **geen loon-/kostendata** meegenomen (uurloon/salaris/werkgeverskosten zitten wel in de
+  Shiftbase-respons van `/timesheets` en `/rosters`, bevestigd via de verkenner) -- zelfde
+  privacy-lijn als de bestaande vaarbemanning-import hierboven ("geen BSN, geboortedatum, adres,
+  loon"), expliciet met de klant afgestemd.
 
 #### Urenexport (nog steeds geblokkeerd, ongewijzigd)
 

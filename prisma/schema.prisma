@@ -128,6 +128,12 @@ model User {
   afasLink       UserAfasLink?
   shiftbaseLink  UserShiftbaseLink?
 
+  /// Ziekte/verlof en gepland rooster uit Shiftbase (sep 2026, read-only,
+  /// zie integrations/shiftbase/sync.ts) -- los van timeEntries omdat het
+  /// geen gewerkte uren zijn.
+  absenceEntries AbsenceEntry[]
+  rosterEntries  RosterEntry[]
+
   /// Taak/toewijzingsmodule (§10.9) -- wie een voortgangsnotitie plaatste.
   rockUpdates    RockUpdate[]
 }
@@ -168,6 +174,9 @@ model Ship {
 
   /// Integratiekoppeling (§10.6) -- null betekent handmatig aangemaakt.
   shiftbaseLink ShipShiftbaseLink?
+
+  /// Gepland rooster uit Shiftbase (sep 2026) -- zie RosterEntry.
+  rosterEntries RosterEntry[]
 }
 
 model TimeEntry {
@@ -198,6 +207,57 @@ model TimeEntry {
   shiftbaseExport  TimeEntryShiftbaseExport?
 
   @@index([userId, date])
+}
+
+/// Ziekte/verlof-uren uit Shiftbase (`/absentees`, read-only sync, sep
+/// 2026) -- één rij per kalenderdag binnen een goedgekeurde afwezigheids-
+/// periode, zelfde vorm als TimeEntry (één rij per dag) zodat de bestaande
+/// periode/granulariteit/weekdag-rapportage-infrastructuur (lib/reports.ts)
+/// hergebruikt kan worden i.p.v. een eigen bucketing te bouwen. `isSick`
+/// komt van Shiftbase's AbsenteeOption.leave-vlag (false = ziekte-achtig,
+/// true = regulier verlof/vakantie/feestdag) -- zie
+/// integrations/shiftbase/sync.ts. `optionLabel` is een snapshot van de
+/// Shiftbase-omschrijving (bv. "Sick", "Vacation") voor weergave; geen
+/// schip-koppeling, Shiftbase's afwezigheidsregistratie is niet aan een
+/// afdeling/schip gebonden.
+model AbsenceEntry {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date                DateTime
+  hours               Decimal  @db.Decimal(5, 2)
+  isSick              Boolean
+  optionLabel         String
+  shiftbaseAbsenteeId String
+  createdAt           DateTime @default(now())
+
+  @@unique([shiftbaseAbsenteeId, date])
+  @@index([userId, date])
+}
+
+/// Gepland/standaard rooster uit Shiftbase (`/rosters`, read-only sync, sep
+/// 2026) -- één rij per geplande dienst-datum. Shiftbase expandeert
+/// herhalende roosterdefinities zelf al tot losse datums bij het opvragen
+/// met min_date/max_date, dus dit is qua vorm identiek aan hoe
+/// syncTimesheets werkt. Bedoeld om te vergelijken met de daadwerkelijk
+/// gewerkte uren (TimeEntry) -- vandaar dezelfde schip-afleiding via de
+/// Shiftbase-department-koppeling.
+model RosterEntry {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shipId                String?
+  ship                  Ship?    @relation(fields: [shipId], references: [id], onDelete: SetNull)
+  date                  DateTime
+  startTime             DateTime
+  endTime               DateTime
+  hours                 Decimal  @db.Decimal(5, 2)
+  shiftbaseOccurrenceId String   @unique
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId, date])
+  @@index([shipId, date])
 }
 
 /// Kleine generieke sleutel/waarde-tabel voor sync-status (bv. laatste
