@@ -36,6 +36,11 @@ export function NavBar({
   /// link ook zien, anders kan diegene helemaal niet bij `/admin/*` komen
   /// (bevestigde bug, 7 sep 2026 -- zie HANDOVER §10.9). Alle aanroepers
   /// geven dus `user.role === "ADMIN" || user.adminScopes.length > 0` door.
+  /// De link zelf wijst naar `/admin` (niet meer hardcoded `/admin/projects`,
+  /// wat een scoped beheerder zonder PROJECTS-scope linea recht in een 403
+  /// liet lopen -- bevestigde bug, 11 sep 2026): `app/admin/page.tsx` stuurt
+  /// vandaar door naar het eerste tabblad waar deze gebruiker daadwerkelijk
+  /// toegang toe heeft.
   isAdmin: boolean;
   language: AppLanguage;
   dict: Dictionary;
@@ -59,7 +64,7 @@ export function NavBar({
         <div className="flex items-center gap-3 text-sm">
           <span className="hidden text-slate-500 sm:inline">{userName}</span>
           {isAdmin && (
-            <Link href="/admin/projects" className="text-red-700 hover:underline">
+            <Link href="/admin" className="text-red-700 hover:underline">
               {dict.manage}
             </Link>
           )}
