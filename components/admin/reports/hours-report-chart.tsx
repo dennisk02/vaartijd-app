@@ -26,7 +26,7 @@ export function HoursReportChart({ ships }: { ships: { id: string; name: string 
   const [shipId, setShipId] = useState("");
   const [granularity, setGranularity] = useState<Granularity>("DAY");
   const [weekday, setWeekday] = useState<number | null>(null);
-  const [category, setCategory] = useState<HourCategory>("ALLE");
+  const [category, setCategory] = useState<HourCategory>("GEWERKT");
   const [report, setReport] = useState<HoursReport | null>(null);
   const [target, setTarget] = useState("");
   const [isPending, startTransition] = useTransition();
